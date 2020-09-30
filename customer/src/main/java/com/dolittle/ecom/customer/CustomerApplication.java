@@ -12,12 +12,15 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+
 @SpringBootApplication
 @RestController
+
 public class CustomerApplication implements CommandLineRunner{
 
 	@Autowired
-		JdbcTemplate jdbcTemplate;
+	JdbcTemplate jdbcTemplate;	
+	
 	public static void main(final String[] args) {
 		SpringApplication.run(CustomerApplication.class, args);
 	}

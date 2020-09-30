@@ -3,7 +3,9 @@ package com.dolittle.ecom.customer.bo;
 import java.util.Properties;
 import java.util.Set;
 
-public class Product {
+import org.springframework.hateoas.RepresentationModel;
+
+public class Product extends RepresentationModel<Product>{
     private String id;
     private String name;
     private String categoryId;

@@ -1,6 +1,8 @@
 package com.dolittle.ecom.customer.bo;
 
-public class Category {
+import org.springframework.hateoas.RepresentationModel;
+
+public class Category extends RepresentationModel<Category>{
     private String id;
     private String name;
     private String image;
