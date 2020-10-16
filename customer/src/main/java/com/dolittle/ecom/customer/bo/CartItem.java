@@ -10,40 +10,39 @@ import lombok.Data;
 public @Data class CartItem extends RepresentationModel<CartItem>{
     private String cartItemId;
     private final String productId;
-    private final String inventorySetVariationId;
+    private final String variationId;
     private String productName;
     private String imageURL;
-    private String qtyUnit;
+    private String unitLabel;
     private int qty;
     private BigDecimal unitPrice;
+    private BigDecimal totalPrice;
     private BigDecimal discount;
     private String productURL;
 
-    public CartItem(String productId, String qtyUnit, String insvId)
+    public CartItem(String productId, String variationId)
     {
         super();
-        if (productId == null || qtyUnit == null)
-            throw new IllegalArgumentException("Exception when creating CartItem Object - Either productId or qtyUnit passed to constructor is null");
+        if (productId == null || variationId == null)
+            throw new IllegalArgumentException("Exception when creating CartItem Object - Either productId or variationId passed to constructor is null"+productId+variationId);
         this.productId = productId;
-        this.qtyUnit = qtyUnit;
-        this.inventorySetVariationId = insvId;
+        this.variationId = variationId;
         this.qty = 0;
     }
 
     public OrderItem getOrderItem()
     {
-        OrderItem oi = new OrderItem(this.productId, this.inventorySetVariationId, this.qty);
+        OrderItem oi = new OrderItem(this.productId, this.variationId, this.qty);
         oi.setName(this.productName);
-        oi.setQtyUnit(this.qtyUnit);
         oi.setOriginalPrice(this.unitPrice);
-        oi.setPriceAfterDiscount(getDiscountedPrice());
+        // oi.setPriceAfterDiscount(getDiscountedPrice());
         return oi;
     }
 
-    public BigDecimal getDiscountedPrice()
-    {
-        return unitPrice.multiply(BigDecimal.ONE.subtract(discount)).setScale(2, RoundingMode.HALF_EVEN);
-    }
+    // public BigDecimal getDiscountedPrice()
+    // {
+    //     return unitPrice.multiply(BigDecimal.ONE.subtract(discount)).setScale(2, RoundingMode.HALF_EVEN);
+    // }
 
     // public String getProductId() {
     //     return productId;

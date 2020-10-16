@@ -7,6 +7,7 @@ select * from item_order_status;
 select * from item_order_transaction;
 select * from tax_profile;
 select * from cart_item;
+select * from inventory_set_variations;
 select * from cart;
 select * from cart_item_status;
 

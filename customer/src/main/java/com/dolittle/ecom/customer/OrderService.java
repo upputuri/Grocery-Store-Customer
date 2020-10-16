@@ -1,15 +1,11 @@
 package com.dolittle.ecom.customer;
 
 import java.math.BigDecimal;
-import java.math.BigInteger;
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 import com.dolittle.ecom.customer.bo.CartItem;
 import com.dolittle.ecom.customer.bo.Order;
-import com.dolittle.ecom.customer.bo.OrderItem;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.hateoas.CollectionModel;

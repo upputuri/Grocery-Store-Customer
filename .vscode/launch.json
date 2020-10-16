@@ -1,0 +1,33 @@
+{
+    "configurations": [
+        {
+            "type": "java",
+            "name": "CodeLens (Launch) - CustomerAppUtil",
+            "request": "launch",
+            "mainClass": "com.dolittle.ecom.customer.util.CustomerAppUtil",
+            "projectName": "customer"
+        },
+        {
+            "type": "java",
+            "name": "CodeLens (Launch) - LoginService",
+            "request": "launch",
+            "mainClass": "com.dolittle.ecom.LoginService",
+            "projectName": "customer"
+        },
+        {
+            "type": "java",
+            "name": "Launch Customer Service with args",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "console": "internalConsole",
+            "mainClass": "com.dolittle.ecom.customer.CustomerApplication",
+            "projectName": "customer",
+            "args": [],
+            "env": {
+                "jdbcurl": "jdbc:mysql://localhost:3306/grocdb",
+                "dbuser": "grocadmin",
+                "dbpassword": "srikanth"
+            }
+        }
+    ]
+}
