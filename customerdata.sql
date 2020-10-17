@@ -13,6 +13,6 @@ select c.cuid, c.fname, c.lname, c.email, c.alt_email, c.dob, c.mobile, c.alt_mo
 from customer c
 where c.email = 'usrikanth@gmail.com' and custatusid = (select custatusid from customer_status where name = 'Active');
 #Assert that cuid passed as param is same as rs.cuid.
-select sa.said, sa.first_name, sa.last_name, sa.line1, sa.line2, sa.zip_code, sa.mobile, state.state
-from customer c, customer_shipping_address sa, state
-where sa.cuid = ? and sa.sasid = (select sasid from customer_shipping_address where name = 'Active');
+select sa.said, sa.first_name, sa.last_name, sa.line1, sa.line2, sa.zip_code, sa.mobile, sa.city, sa.stid, state.state
+from customer_shipping_address sa, state
+where sa.cuid = 618 and sa.stid = state.stid and sa.sasid = (select sasid from customer_shipping_address_status where name = 'Active');

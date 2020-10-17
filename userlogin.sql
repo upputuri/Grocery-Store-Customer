@@ -24,3 +24,11 @@ select u.uid, c.cuid, c.fname, c.lname, c.email, c.photo from customer c, auser 
     #Get usid from the above insert and return the customer fname, lname, cuid, email along with usid to client
 #no session 
 
+insert into auser (name, email, password, type_auser, ustatusid) values (?, ?, ?, 3, (select ustatusid from auser_status where name = 'Active'));
+
+insert into customer (uid, fname, lname, email, password) values (?, ?, ?, ?, ?);
+
+update customer set salutation=1, email='usrikanth@5roads.in' where cuid='618';
+
+
+

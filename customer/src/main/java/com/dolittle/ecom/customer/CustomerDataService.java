@@ -15,6 +15,7 @@ import com.dolittle.ecom.customer.util.CustomerAppUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.EmptyResultDataAccessException;
+import org.springframework.hateoas.CollectionModel;
 import org.springframework.hateoas.Link;
 import org.springframework.hateoas.server.mvc.WebMvcLinkBuilder;
 import org.springframework.http.HttpStatus;
@@ -174,7 +175,7 @@ public class CustomerDataService {
 
         try{
             jdbcTemplateObject.update("update customer set fname=?, lname=?, alt_email=?, dob=?, mobile=?, alt_mobile=? where cuid=?", 
-                            profile.getFName(), profile.getLName(), profile.getAltEmail(), strDate, profile.getMobile(), profile.getAltMobile(), customer.getId());
+                            profile.getFName(), profile.getLName(), profile.getAltEmail(), strDate, profile.getMobile(), profile.getAltMobile(), customerId);
         }
         catch(DataAccessException e)
         {
@@ -185,7 +186,7 @@ public class CustomerDataService {
     }
 
     @GetMapping(value = "/customers/{id}/addresses", produces = "application/hal+json")
-    public List<ShippingAddress> getCustomerAddresses(@PathVariable(value = "id") String customerId, Principal principal)
+    public CollectionModel<ShippingAddress> getCustomerAddresses(@PathVariable(value = "id") String customerId, Principal principal)
     {
         log.info("Processing request Get Customer Addressses for customer Id {}"+customerId);
         assertAuthCustomerId(principal, customerId);
@@ -203,11 +204,15 @@ public class CustomerDataService {
                 sa.setLastName(rs.getString("last_name"));
                 sa.setState(rs.getString("state"));
                 sa.setStateId(rs.getInt("stid"));
+                Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getCustomerAddresses(customerId, null)).withSelfRel();
+                sa.add(selfLink);
                 return sa;
             });
             Customer customer = new Customer();
             customer.setShippingAddresses(addressList);
-            return addressList;
+            Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getCustomerAddresses(customerId, null)).withSelfRel();
+            CollectionModel<ShippingAddress> result = CollectionModel.of(addressList, selfLink);
+            return result;
         }
         catch(DataAccessException e)
         {
