@@ -16,6 +16,7 @@ import org.springframework.hateoas.CollectionModel;
 import org.springframework.hateoas.Link;
 import org.springframework.hateoas.server.mvc.WebMvcLinkBuilder;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
@@ -71,13 +72,15 @@ public class CustomerApplication implements CommandLineRunner{
 		return users;
 	}
 
-	@RequestMapping(value= "/application/states", produces = "application/hal+json")
+	@GetMapping(value= "/application/states", produces = "application/hal+json")
 	public CollectionModel<State> getStates()
 	{
 		List<State> states = jdbcTemplate.query("select stid, state from state", (rs, rowNumber) -> {
 			State state = new State();
 			state.setName(rs.getString("state"));
 			state.setStateId(String.valueOf(rs.getInt("stId")));
+			Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getStates()).withSelfRel();
+			state.add(selfLink);
 			return state;
 		});
 

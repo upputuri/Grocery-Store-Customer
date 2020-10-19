@@ -263,6 +263,34 @@ public class CustomerDataService {
         }
     }
 
+    @PutMapping(value = "/customers/{customerId}/addresses/{addressId}", produces = "application/hal+json")
+    public void updateAddress(@PathVariable(value = "customerId") String customerId, 
+                                            @PathVariable(value = "addressId") String addressId, 
+                                            @RequestBody ShippingAddress address, 
+                                            Principal principal)
+    {
+        try{  
+            log.info("Processing request to update address of customer Id {} with addressId {}", customerId, address.getId());
+            assertAuthCustomerId(principal, customerId);
+            String address_update_sql = "update customer_shipping_address set first_name=?, last_name=?, line1=?, line2=?, city=?, zip_code=?, mobile=?, stid=? "+
+                                        "where said=?";
+                            
+            int rows = jdbcTemplateObject.update(address_update_sql, address.getFirstName(), address.getLastName(), address.getLine1(), address.getLine2(),
+                                                            address.getCity(), address.getZipcode(), address.getPhoneNumber(), address.getStateId(), addressId);
+
+            if (rows != 1)
+            {
+                log.error("Failed to find an address record to update with the given query");
+                throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "The sql to update the address in db could not find a matching record with the given address Id: "+address.getId());
+            }
+        }
+        catch(DataAccessException e)
+        {
+            log.error("An exception occurred while inserting a new Shipping Address", e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "An internal error occurred!, pls retry after some time or pls call support");
+        }
+    }
+
     private Customer assertAuthCustomerId(Principal principal, String customerId)
     {
         Customer customer = null;

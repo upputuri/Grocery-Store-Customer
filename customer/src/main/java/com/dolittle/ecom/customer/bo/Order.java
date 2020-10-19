@@ -128,7 +128,7 @@ public @Data class Order extends RepresentationModel<Order>{
         return this.totalChargesValue;
     }
 
-    public BigDecimal geFinalTotal()
+    public BigDecimal getFinalTotal()
     {
         computeTotals();
         return this.finalTotal;

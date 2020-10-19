@@ -35,7 +35,7 @@ public @Data class CartItem extends RepresentationModel<CartItem>{
         OrderItem oi = new OrderItem(this.productId, this.variationId, this.qty);
         oi.setName(this.productName);
         oi.setOriginalPrice(this.unitPrice);
-        // oi.setPriceAfterDiscount(getDiscountedPrice());
+        oi.setPriceAfterDiscount(this.unitPrice);
         return oi;
     }
 

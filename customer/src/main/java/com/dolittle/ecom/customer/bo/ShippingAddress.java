@@ -1,13 +1,10 @@
 package com.dolittle.ecom.customer.bo;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
-
 import org.springframework.hateoas.RepresentationModel;
 
 import lombok.Data;
 
 public @Data class ShippingAddress extends RepresentationModel<ShippingAddress>{
-    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
     private String id;
     private String firstName;
     private String lastName;

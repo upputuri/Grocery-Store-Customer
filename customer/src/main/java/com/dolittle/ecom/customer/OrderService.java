@@ -1,20 +1,28 @@
 package com.dolittle.ecom.customer;
 
 import java.math.BigDecimal;
+import java.security.Principal;
 import java.util.HashMap;
 import java.util.Map;
 
+import com.dolittle.ecom.customer.bo.CartContext;
 import com.dolittle.ecom.customer.bo.CartItem;
 import com.dolittle.ecom.customer.bo.Order;
+import com.dolittle.ecom.customer.bo.ShippingAddress;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.hateoas.CollectionModel;
+import org.springframework.hateoas.Link;
+import org.springframework.hateoas.server.mvc.WebMvcLinkBuilder;
 import org.springframework.jdbc.core.BatchPreparedStatementSetter;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.simple.SimpleJdbcInsert;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import lombok.Data;
@@ -29,7 +37,7 @@ public class OrderService {
     @Autowired
     CustomerCartService cartService;
 
-    @PostMapping(value = "/orders")
+    @PostMapping(value = "/orders", produces = "application/hal+json")
     @Transactional
     public Order createOrder(@RequestBody Order order)
     {
@@ -143,6 +151,66 @@ public class OrderService {
         jdbcTemplateObject.update(update_cart_items_to_executed, order.getCustomerId());
         log.debug("New order created - {} ",order.toString());
         log.info("Order "+oid+" created for customer - "+order.getCustomerId());
+        return order;
+    }
+
+    @GetMapping(value = "/orders/preorder", produces = "application/hal+json")
+    public Order getPreOrder(@RequestParam String customerId, @RequestParam String deliveryAddressId, Principal principal)
+    {
+        log.info("Beginning to create a preorder for customer - "+customerId);
+        Order order = new Order();
+        CollectionModel<CartItem> cartItemsModel = cartService.getCartItems(customerId);
+        cartItemsModel.forEach((cartItem) -> {
+            order.addOrderItem(cartItem.getOrderItem());
+            log.debug("Adding cart item to order "+cartItem.toString());
+        });
+
+        @Data class TaxProfile{
+            private String taxproid;
+            private String name;
+            private String tax_type;
+            private BigDecimal rate;
+        }
+
+        String query_tax_detail_sql = "select taxproid, name, rate, tax_type from tax_profile as t where t.default = 1";
+        // Map<String, BigDecimal> tax_profile_rs_map = new HashMap<String, BigDecimal>();
+        TaxProfile taxProfile = jdbcTemplateObject.queryForObject(query_tax_detail_sql, (rs, rowNum) ->{
+            TaxProfile t = new TaxProfile();
+            t.taxproid = rs.getString("taxproid");
+            t.name = rs.getString("name");
+            t.rate = rs.getBigDecimal("rate");
+            t.tax_type = rs.getString("tax_type");
+            return t;
+        });
+
+        BigDecimal taxRate = taxProfile.rate;
+        String taxDisplayName = taxProfile.name+"("+taxRate+")";
+        order.addTax(taxDisplayName, taxRate);
+        
+        //Add promo code discounts to order
+        // cartContext.getPromoCodes().stream().map((code) -> {
+
+        // });
+        //Get delivery address
+        String get_delivery_address_sql = "select sa.said, sa.first_name, sa.last_name, sa.line1, sa.line2, sa.zip_code, sa.mobile, sa.city, sa.stid, state.state "+
+                                            "from customer_shipping_address sa, state where sa.said = ? and sa.stid = state.stid";
+                                            
+        ShippingAddress deliveryAddress = jdbcTemplateObject.queryForObject(get_delivery_address_sql, new Object[]{deliveryAddressId}, (rs, rowNum) -> {
+            ShippingAddress sa = new ShippingAddress(rs.getString("line1"), rs.getString("city"), rs.getString("zip_code"), rs.getString("mobile"));
+            sa.setId(String.valueOf(rs.getInt("said")));
+            sa.setLine2(rs.getString("line2"));
+            sa.setFirstName(rs.getString("first_name"));
+            sa.setLastName(rs.getString("last_name"));
+            sa.setState(rs.getString("state"));
+            sa.setStateId(rs.getInt("stid"));
+            Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getPreOrder(null, null, null)).withSelfRel();
+            sa.add(selfLink);
+            return sa;
+        });
+        Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getPreOrder(null, null, null)).withSelfRel();
+        order.add(selfLink);
+        order.setShippingAddress(deliveryAddress);
+        order.setShippingAddressId(deliveryAddressId);
         return order;
     }
 }
