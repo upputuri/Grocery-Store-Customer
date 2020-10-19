@@ -15,9 +15,9 @@ public @Data class CartItem extends RepresentationModel<CartItem>{
     private String imageURL;
     private String unitLabel;
     private int qty;
-    private BigDecimal unitPrice;
-    private BigDecimal totalPrice;
-    private BigDecimal discount;
+    private BigDecimal unitPrice = BigDecimal.ZERO;
+    private BigDecimal totalPrice = BigDecimal.ZERO;
+    private BigDecimal discount = BigDecimal.ZERO;
     private String productURL;
 
     public CartItem(String productId, String variationId)
@@ -34,6 +34,7 @@ public @Data class CartItem extends RepresentationModel<CartItem>{
     {
         OrderItem oi = new OrderItem(this.productId, this.variationId, this.qty);
         oi.setName(this.productName);
+        oi.setQtyUnit(this.unitLabel);
         oi.setOriginalPrice(this.unitPrice);
         oi.setPriceAfterDiscount(this.unitPrice);
         return oi;

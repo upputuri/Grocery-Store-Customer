@@ -11,6 +11,18 @@ select * from inventory_set_variations;
 select * from cart;
 select * from cart_item_status;
 
+select * from promo_code;
+select * from promo_code_type;
+select * from promo_code_discount_type;
+select * from promo_code_item;
+select * from promo_code_status;
+
+select * from customer_payment_option;
+select * from customer_payment_option_type;
+select * from customer_payment_option_status;
+select * from customer_payment_option_attribute;
+
+
 #
 -- 1. Create an order by inserting order row in item_order
 --    Insert order items in item_order_item table
@@ -45,3 +57,10 @@ and cartisid = (select cartisid from cart_item_status where name like 'active');
 
 insert into item_order_item (oid, iid, isvid, quantity, discounted_price, item_price, oisid) values (398, 129, 139, 0, 100.00, 100.00, (select oisid from item_order_item_status where name like 'pending'));
 select oisid from item_order_item_status where name like 'pending';
+
+#Get shipping address
+select sa.said, sa.first_name, sa.last_name, sa.line1, sa.line2, sa.zip_code, sa.mobile, sa.city, sa.stid, state.state 
+from customer_shipping_address sa, state where sa.said = 41 and sa.stid = state.stid;
+
+#Get payment options
+select cpo.cpoid, cpo.cptid , cpo.name, cpo.description from customer_payment_option cpo, customer_payment_option_status cpos where cptid=2 and cpo.cposid = cpos.cposid;

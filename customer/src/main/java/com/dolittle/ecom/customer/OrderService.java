@@ -7,13 +7,17 @@ import java.util.Map;
 
 import com.dolittle.ecom.customer.bo.CartContext;
 import com.dolittle.ecom.customer.bo.CartItem;
+import com.dolittle.ecom.customer.bo.Customer;
 import com.dolittle.ecom.customer.bo.Order;
+import com.dolittle.ecom.customer.bo.OrderContext;
 import com.dolittle.ecom.customer.bo.ShippingAddress;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.hateoas.CollectionModel;
 import org.springframework.hateoas.Link;
 import org.springframework.hateoas.server.mvc.WebMvcLinkBuilder;
+import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.BatchPreparedStatementSetter;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.simple.SimpleJdbcInsert;
@@ -24,6 +28,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
@@ -39,7 +44,7 @@ public class OrderService {
 
     @PostMapping(value = "/orders", produces = "application/hal+json")
     @Transactional
-    public Order createOrder(@RequestBody Order order)
+    public Order createOrder(@RequestBody OrderContext orderContext, Principal principal)
     {
         // 1. Get the tax rate from tax profile
         // 2. Create order in db
@@ -47,56 +52,28 @@ public class OrderService {
         // 4. Get the cart items and generate order items from them.
         // 5. Add order items to db and link them to order
         // 6. Change status of cart items in db to 'executed'
-        log.info("Beginning to create an order for customer - "+order.getCustomerId());
-        CollectionModel<CartItem> cartItemsModel = cartService.getCartItems(order.getCustomerId());
-        cartItemsModel.forEach((cartItem) -> {
-            order.addOrderItem(cartItem.getOrderItem());
-            log.debug("Adding cart item to order "+cartItem.toString());
-        });
 
-        @Data class TaxProfile{
-            private String taxproid;
-            private String name;
-            private String tax_type;
-            private BigDecimal rate;
-        }
+        log.info("Beginning to create an order for customer - "+orderContext.getCustomerId());
+        assertAuthCustomerId(principal, orderContext.getCustomerId());
+        Order preOrder = this.getPreOrder(orderContext.getCustomerId(), orderContext.getDeliveryAddressId(), principal);
 
-        String query_tax_detail_sql = "select taxproid, name, rate, tax_type from tax_profile as t where t.default = 1";
-        // Map<String, BigDecimal> tax_profile_rs_map = new HashMap<String, BigDecimal>();
-        TaxProfile taxProfile = jdbcTemplateObject.queryForObject(query_tax_detail_sql, (rs, rowNum) ->{
-            TaxProfile t = new TaxProfile();
-            t.taxproid = rs.getString("taxproid");
-            t.name = rs.getString("name");
-            t.rate = rs.getBigDecimal("rate");
-            t.tax_type = rs.getString("tax_type");
-            return t;
-        });
-
-        BigDecimal taxRate = taxProfile.rate;
-        String taxDisplayName = taxProfile.name+"("+taxRate+")";
-        order.addTax(taxDisplayName, taxRate);
-        //order.addDiscount(...)
-        //order.addCharge(...)
-
-        // Integer taxProfileId = jdbcTemplateObject.queryForObject(query_tax_detail_sql, Integer.TYPE);
-
-        // String insert_order_sql = "insert into item_order (cuid, said, taxproid, tax_percent, tax_type, price, discounted_price) "+
-        //                             "values (?, ?, ? , ?, ?, ?, ?)";
         SimpleJdbcInsert jdbcInsert_Order = new SimpleJdbcInsert(jdbcTemplateObject)
                                             .usingColumns("cuid", "said", "taxproid", "tax_percent", "tax_type", "price", "discounted_price")
                                             .withTableName("item_order")
                                             .usingGeneratedKeyColumns("oid");
 
         Map<String, Object> parameters_insert_order = new HashMap<String, Object>(1);
-        parameters_insert_order.put("cuid", order.getCustomerId());
-        parameters_insert_order.put("said", order.getShippingAddressId());
-        parameters_insert_order.put("taxproid", taxProfile.taxproid);
-        parameters_insert_order.put("tax_percent", taxProfile.rate);
-        parameters_insert_order.put("tax_type", taxProfile.tax_type);        
-        parameters_insert_order.put("price", order.getOrderTotal());
-        parameters_insert_order.put("discounted_price", order.getDiscountedTotal());
+        parameters_insert_order.put("cuid", orderContext.getCustomerId());
+        parameters_insert_order.put("said", preOrder.getShippingAddressId());
+        parameters_insert_order.put("taxproid", preOrder.getTaxProfileId());
+        parameters_insert_order.put("tax_percent", preOrder.getTotalTaxRate());
+        parameters_insert_order.put("tax_type", preOrder.getTaxType());        
+        parameters_insert_order.put("price", preOrder.getOrderTotal());
+        parameters_insert_order.put("discounted_price", preOrder.getDiscountedTotal());
 
         Number oid = jdbcInsert_Order.executeAndReturnKey(parameters_insert_order);
+
+        Order order = preOrder;
         order.setId(oid.toString());
 
         // String insert_order_shipping_address = "insert into item_order_shipping_address (oid, shipping_first_name, shipping_last_name, "+
@@ -148,7 +125,7 @@ public class OrderService {
                                                 "where cartid = (select cartid from cart where cuid=?) "+
                                                 "and cartisid = (select cartisid from cart_item_status where name like 'active')";
 
-        jdbcTemplateObject.update(update_cart_items_to_executed, order.getCustomerId());
+        jdbcTemplateObject.update(update_cart_items_to_executed, orderContext.getCustomerId());
         log.debug("New order created - {} ",order.toString());
         log.info("Order "+oid+" created for customer - "+order.getCustomerId());
         return order;
@@ -158,7 +135,9 @@ public class OrderService {
     public Order getPreOrder(@RequestParam String customerId, @RequestParam String deliveryAddressId, Principal principal)
     {
         log.info("Beginning to create a preorder for customer - "+customerId);
+        assertAuthCustomerId(principal, customerId);
         Order order = new Order();
+        order.setCustomerId(customerId);
         CollectionModel<CartItem> cartItemsModel = cartService.getCartItems(customerId);
         cartItemsModel.forEach((cartItem) -> {
             order.addOrderItem(cartItem.getOrderItem());
@@ -172,6 +151,13 @@ public class OrderService {
             private BigDecimal rate;
         }
 
+        //Add promo code discounts to order
+        // cartContext.getPromoCodes().stream().map((code) -> {
+            //order.addDiscount(...)
+            
+            // });
+        //order.addCharge(...)
+
         String query_tax_detail_sql = "select taxproid, name, rate, tax_type from tax_profile as t where t.default = 1";
         // Map<String, BigDecimal> tax_profile_rs_map = new HashMap<String, BigDecimal>();
         TaxProfile taxProfile = jdbcTemplateObject.queryForObject(query_tax_detail_sql, (rs, rowNum) ->{
@@ -182,15 +168,13 @@ public class OrderService {
             t.tax_type = rs.getString("tax_type");
             return t;
         });
+        order.setTaxProfileId(taxProfile.taxproid);
+        order.setTaxType(taxProfile.tax_type);
 
         BigDecimal taxRate = taxProfile.rate;
         String taxDisplayName = taxProfile.name+"("+taxRate+")";
         order.addTax(taxDisplayName, taxRate);
         
-        //Add promo code discounts to order
-        // cartContext.getPromoCodes().stream().map((code) -> {
-
-        // });
         //Get delivery address
         String get_delivery_address_sql = "select sa.said, sa.first_name, sa.last_name, sa.line1, sa.line2, sa.zip_code, sa.mobile, sa.city, sa.stid, state.state "+
                                             "from customer_shipping_address sa, state where sa.said = ? and sa.stid = state.stid";
@@ -212,5 +196,25 @@ public class OrderService {
         order.setShippingAddress(deliveryAddress);
         order.setShippingAddressId(deliveryAddressId);
         return order;
+    }
+
+    private Customer assertAuthCustomerId(Principal principal, String customerId)
+    {
+        Customer customer = null;
+        String get_customer_profile_query = "select c.cuid from customer c "+
+                                    "where c.email = ? and c.cuid = ? and c.custatusid = (select custatusid from customer_status where name='Active')";
+        try{
+            customer = jdbcTemplateObject.queryForObject(get_customer_profile_query, new Object[]{principal.getName(), customerId}, (rs, rownum) -> {
+                Customer c = new Customer();
+                c.setId(String.valueOf(rs.getInt("cuid")));
+                return c;
+            });
+        }
+        catch(EmptyResultDataAccessException e)
+        {
+            log.error("Requested customer Id does not match with authenticated user or the customer is inactive");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "You do not have permission to view details of the provided customer Id");
+        }
+        return customer;
     }
 }

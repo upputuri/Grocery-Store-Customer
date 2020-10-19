@@ -3,6 +3,7 @@ package com.dolittle.ecom.customer;
 import java.util.List;
 
 import com.dolittle.ecom.customer.bo.User;
+import com.dolittle.ecom.customer.bo.general.PaymentOption;
 import com.dolittle.ecom.customer.bo.general.State;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,17 +16,23 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.hateoas.CollectionModel;
 import org.springframework.hateoas.Link;
 import org.springframework.hateoas.server.mvc.WebMvcLinkBuilder;
+import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+
+import lombok.extern.slf4j.Slf4j;
 
 // @SpringBootApplication
 @SpringBootApplication(exclude = { SecurityAutoConfiguration.class })
 @RestController
 @Configuration
+@Slf4j
 public class CustomerApplication implements CommandLineRunner{
 
 	@Autowired
@@ -86,6 +93,31 @@ public class CustomerApplication implements CommandLineRunner{
 
 		Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getStates()).withSelfRel();
 		CollectionModel<State> result = CollectionModel.of(states, selfLink);
+		return result;
+	}
+
+	@GetMapping(value= "/application/paymentoptions", produces = "application/hal+json")
+	public CollectionModel<PaymentOption> getPaymentOptions(@RequestParam String type)
+	{
+		if (!type.equalsIgnoreCase("ondelivery"))
+		{
+			log.error("Service not implemented for type: "+type);
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Not implemented");
+		}
+		List<PaymentOption> paymentOptions = jdbcTemplate.query("select cpo.cpoid, cpo.cptid, cpo.name, cpo.description from customer_payment_option cpo, customer_payment_option_status cpos "+
+												"where cptid=2 and cpo.cposid = cpos.cposid", new Object[]{}, (rs, rowNumber) -> {
+			PaymentOption option = new PaymentOption();
+			option.setId(String.valueOf(rs.getString("cpoid")));
+			option.setTypeId(String.valueOf(rs.getString("cptid")));
+			option.setName(rs.getString("name"));
+			option.setDescription(rs.getString("description"));
+			Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getPaymentOptions(null)).withSelfRel();
+			option.add(selfLink);
+			return option;
+		});
+
+		Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getPaymentOptions(null)).withSelfRel();
+		CollectionModel<PaymentOption> result = CollectionModel.of(paymentOptions, selfLink);
 		return result;
 	}
 	
