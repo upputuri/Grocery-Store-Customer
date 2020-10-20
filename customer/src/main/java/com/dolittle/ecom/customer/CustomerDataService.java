@@ -77,8 +77,9 @@ public class CustomerDataService {
 
 
             //Now insert a customer record
+            int custatusid = jdbcTemplateObject.queryForObject("select custatusid from customer_status where name = 'Active'", Integer.TYPE);
             SimpleJdbcInsert customerJdbcInsert = new SimpleJdbcInsert(jdbcTemplateObject)
-                                                    .usingColumns("uid", "fname", "lname", "email", "password")
+                                                    .usingColumns("uid", "fname", "lname", "email", "password", "custatusid")
                                                     .withTableName("customer")
                                                     .usingGeneratedKeyColumns("cuid");
             Map<String, Object> customerParams = new HashMap<String, Object>(1);
@@ -86,7 +87,8 @@ public class CustomerDataService {
             customerParams.put("fname", customer.getFName());
             customerParams.put("lname", customer.getLName());
             customerParams.put("email", customer.getEmail());
-            customerParams.put("password", passwordHash);        
+            customerParams.put("password", passwordHash);
+            customerParams.put("custatusid", custatusid);        
 
             Number cuid = customerJdbcInsert.executeAndReturnKey(customerParams);
             
@@ -171,7 +173,7 @@ public class CustomerDataService {
         assertAuthCustomerId(principal, customerId);
 
         DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");  
-        String strDate = dateFormat.format(profile.getDob());  
+        String strDate = profile.getDob() != null ? dateFormat.format(profile.getDob()) : null;  
 
         try{
             jdbcTemplateObject.update("update customer set fname=?, lname=?, alt_email=?, dob=?, mobile=?, alt_mobile=? where cuid=?", 
