@@ -5,17 +5,13 @@ import java.security.MessageDigest;
 import java.security.Principal;
 
 import com.dolittle.ecom.customer.bo.Customer;
-import com.dolittle.ecom.customer.bo.LoginCredentials;
 import com.dolittle.ecom.customer.bo.LoginSession;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.dao.DataAccessException;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -53,7 +49,8 @@ public class LoginService {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid login Id or Password");            
         }
 
-        String get_cart_count_sql = "select COALESCE(sum(quantity),0) from cart_item where cartid=(select cartid from cart where cuid=?)";
+        String get_cart_count_sql = "select COALESCE(sum(quantity),0) from cart_item where cartid=(select cartid from cart where cuid=?) "+
+                                    "and cartisid=(select cartisid from cart_item_status where name='Active')";
         int cartItemCount = jdbcTemplateObject.queryForObject(get_cart_count_sql, new Object[]{customer.getId()}, Integer.TYPE);
         // TODO: Implement token/sessionid to avoid sending password each time.  
         // //A customer object is available
