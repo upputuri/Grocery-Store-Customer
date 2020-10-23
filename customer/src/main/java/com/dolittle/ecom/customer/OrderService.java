@@ -2,16 +2,22 @@ package com.dolittle.ecom.customer;
 
 import java.math.BigDecimal;
 import java.security.Principal;
+import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import com.dolittle.ecom.customer.bo.CartItem;
 import com.dolittle.ecom.customer.bo.Customer;
 import com.dolittle.ecom.customer.bo.Order;
 import com.dolittle.ecom.customer.bo.OrderContext;
+import com.dolittle.ecom.customer.bo.OrderItem;
+import com.dolittle.ecom.customer.bo.OrderSummary;
 import com.dolittle.ecom.customer.bo.ShippingAddress;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataAccessException;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.hateoas.CollectionModel;
 import org.springframework.hateoas.Link;
@@ -22,6 +28,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.simple.SimpleJdbcInsert;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -40,6 +47,99 @@ public class OrderService {
     @Autowired
     CustomerCartService cartService;
 
+    @GetMapping(value = "/orders", produces = "application/hal+json")
+    public CollectionModel<OrderSummary> getOrders(@RequestParam String cuid, Principal principal)
+    {
+        log.info("Processing get orders for customer id: "+cuid);
+        assertAuthCustomerId(principal, cuid);
+
+        List<OrderSummary> orders = new ArrayList<OrderSummary>();
+        String get_orders_sql = "select oid, cuid, said, shipping_cost, tax_percent, price, discounted_price, ios.name, item_order.created_ts "+
+                                "from item_order, item_order_status as ios where cuid=? and item_order.osid = ios.osid";
+        try {
+            orders = jdbcTemplateObject.query(get_orders_sql, new Object[]{cuid}, (rs, rowNum) -> {
+                OrderSummary os = new OrderSummary();
+                os.setOrderId(String.valueOf(rs.getInt("oid")));
+                os.setCustomerId(String.valueOf(rs.getInt("cuid")));
+                os.setShippingAddressId(String.valueOf(rs.getInt("said")));
+                os.setTotalChargesValue(rs.getBigDecimal("shipping_cost"));
+                os.setTotalTaxValue(rs.getBigDecimal("tax_percent"));
+                os.setOrderTotal(rs.getBigDecimal("price"));
+                os.setDiscountedTotal(rs.getBigDecimal("discounted_price"));
+                os.setOrderStatus(rs.getString("name"));
+                Calendar order_ts = Calendar.getInstance();
+                order_ts.setTimeInMillis(rs.getTimestamp("created_ts").getTime());
+                os.setCreatedTS(order_ts);
+                Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getOrders(cuid, principal)).withSelfRel();
+                os.add(selfLink);
+                return os;
+            });
+        }catch(DataAccessException e){
+            log.error("An exception occurred while getting orders data for customerId: "+cuid, e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "An internal error occurred!, pls retry after some time or pls call support");
+        }
+        Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getOrders(cuid, principal)).withSelfRel();
+        CollectionModel<OrderSummary> result = CollectionModel.of(orders, selfLink);
+        return result;
+    }
+
+    @GetMapping(value="/orders/{orderId}")
+    public Order getOrderDetail(@PathVariable String orderId, Principal principal)
+    {
+        log.info("Processing request to get Order detail for orderId: "+orderId);
+        String get_order_sql = "select io.oid, io.cuid, io.said, io.shipping_cost, io.tax_percent, io.price, io.discounted_price, ios.name as status, io.created_ts, "+
+                                "sa.shipping_first_name, sa.shipping_last_name, sa.shipping_line1, sa.shipping_line2, sa.shipping_city, sa.shipping_zip_code, state.state, state.stid, "+
+                                "sa.shipping_mobile from item_order as io, item_order_status as ios, item_order_shipping_address as sa, state where io.oid=? and sa.oisaid = io.said "+
+                                "and io.osid = ios.osid and sa.shipping_stid = state.stid";
+        Order order = jdbcTemplateObject.queryForObject(get_order_sql, new Object[]{orderId}, (rs, rowNum) -> {
+            Order o = new Order();
+            BigDecimal discountedTotal = rs.getBigDecimal("discounted_price");
+            BigDecimal taxRate = rs.getBigDecimal("tax_percent");
+            BigDecimal totalTaxValue = discountedTotal.multiply(taxRate.divide(new BigDecimal(100)));
+            o.setId(String.valueOf(rs.getInt("oid")));
+            o.setCustomerId(String.valueOf(rs.getInt("cuid")));
+            o.setShippingAddressId(String.valueOf(rs.getInt("said")));
+            o.setDiscountedTotal(discountedTotal);
+            o.setStatus(rs.getString("status"));
+            o.setTotalChargesValue(rs.getBigDecimal("shipping_cost"));
+            o.setTotalTaxRate(taxRate);
+            o.setTotalTaxValue(totalTaxValue);
+            o.setOrderTotal(rs.getBigDecimal("price"));
+            ShippingAddress sa = new ShippingAddress(rs.getString("shipping_line1"), rs.getString("shipping_city"), rs.getString("shipping_zip_code"), rs.getString("shipping_mobile"));
+            sa.setId(String.valueOf(rs.getInt("said")));
+            sa.setLine2(rs.getString("shipping_line2"));
+            sa.setFirstName(rs.getString("shipping_first_name"));
+            sa.setLastName(rs.getString("shipping_last_name"));
+            sa.setState(rs.getString("state"));
+            sa.setStateId(rs.getInt("stid"));
+            o.setShippingAddress(sa);
+            Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getOrderDetail(orderId, principal)).withSelfRel();
+            o.add(selfLink);
+            return o;
+        });
+        assertAuthCustomerId(principal, order.getCustomerId());
+
+        String get_order_items = "select ioi.oiid, ioi.oid, ioi.iid, ioi.isvid, ioi.quantity, ioi.discounted_price, ii.name as item_name, insv.name as variant_name "+
+                                "from item_order_item ioi, inventory_set_variations as insv, item_item as ii "+
+                                "where ii.iid=ioi.iid and insv.isvid = ioi.isvid and ioi.oid=?";
+                                
+        List<OrderItem> orderItems = jdbcTemplateObject.query(get_order_items, new Object[]{orderId}, (rs, rowNum) -> {
+            OrderItem oi = new OrderItem(String.valueOf(rs.getInt("iid")), String.valueOf(rs.getInt("isvid")), rs.getInt("quantity"));
+            oi.setName(rs.getString("item_name"));
+            oi.setQtyUnit(rs.getString("variant_name"));
+            oi.setPriceAfterDiscount(rs.getBigDecimal("discounted_price"));
+            Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getOrderDetail(orderId, principal)).withSelfRel();
+            oi.add(selfLink);
+            return oi;
+        });
+        
+        order.setOrderItems(orderItems);
+        Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getOrderDetail(orderId, principal)).withSelfRel();
+        order.add(selfLink);
+
+        return order;
+    }
+
     @PostMapping(value = "/orders", produces = "application/hal+json")
     @Transactional
     public Order createOrder(@RequestBody OrderContext orderContext, Principal principal)
@@ -55,8 +155,10 @@ public class OrderService {
         assertAuthCustomerId(principal, orderContext.getCustomerId());
         Order preOrder = this.getPreOrder(orderContext.getCustomerId(), orderContext.getDeliveryAddressId(), principal);
 
+        int osid = jdbcTemplateObject.queryForObject("select osid from item_order_status where name='Initial'", Integer.TYPE);
+
         SimpleJdbcInsert jdbcInsert_Order = new SimpleJdbcInsert(jdbcTemplateObject)
-                                            .usingColumns("cuid", "said", "taxproid", "tax_percent", "tax_type", "price", "discounted_price")
+                                            .usingColumns("cuid", "said", "taxproid", "tax_percent", "tax_type", "price", "discounted_price", "osid")
                                             .withTableName("item_order")
                                             .usingGeneratedKeyColumns("oid");
 
@@ -68,6 +170,7 @@ public class OrderService {
         parameters_insert_order.put("tax_type", preOrder.getTaxType());        
         parameters_insert_order.put("price", preOrder.getOrderTotal());
         parameters_insert_order.put("discounted_price", preOrder.getDiscountedTotal());
+        parameters_insert_order.put("osid", osid);
 
         Number oid = jdbcInsert_Order.executeAndReturnKey(parameters_insert_order);
 

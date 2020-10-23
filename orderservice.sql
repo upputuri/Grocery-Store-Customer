@@ -10,6 +10,7 @@ select * from cart_item;
 select * from inventory_set_variations;
 select * from cart;
 select * from cart_item_status;
+select * from state;
 
 select * from promo_code;
 select * from promo_code_type;
@@ -64,3 +65,13 @@ from customer_shipping_address sa, state where sa.said = 41 and sa.stid = state.
 
 #Get payment options
 select cpo.cpoid, cpo.cptid , cpo.name, cpo.description from customer_payment_option cpo, customer_payment_option_status cpos where cptid=2 and cpo.cposid = cpos.cposid;
+
+#Get orders
+select oid, cuid, said, shipping_cost, tax_percent, price, discounted_price, ios.name, item_order.created_ts
+                                from item_order, item_order_status as ios where cuid=618 and item_order.osid = ios.osid;
+                                
+
+#Get order detail
+select ioi.oiid, ioi.oid, ioi.iid, ioi.isvid, ioi.quantity, ioi.discounted_price, ii.name as item_name, insv.name as variant_name 
+from item_order_item ioi, inventory_set_variations as insv, item_item as ii 
+where ii.iid=ioi.iid and insvid.isvid = ioi.isvid and ioi.oid=?

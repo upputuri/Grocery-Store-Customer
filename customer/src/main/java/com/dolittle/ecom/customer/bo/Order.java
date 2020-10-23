@@ -5,9 +5,9 @@ import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Calendar;
 import java.util.Map;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonProperty.Access;
@@ -59,6 +59,8 @@ public @Data class Order extends RepresentationModel<Order>{
     @JsonProperty(access = Access.READ_ONLY)
     @JsonFormat(shape = JsonFormat.Shape.STRING)    
     private BigDecimal finalTotal = BigDecimal.ZERO;
+    @JsonProperty(access = Access.READ_ONLY)
+    private Calendar createdTS = Calendar.getInstance();
 
     public Order()
     {
