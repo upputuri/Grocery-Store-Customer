@@ -126,29 +126,29 @@ public @Data class Order extends RepresentationModel<Order>{
         this.finalTotal = grossTotalAfterCharges.add(totalTaxValue).setScale(2, RoundingMode.HALF_EVEN);
     }
 
-    public BigDecimal getTotalTaxValue(BigDecimal inputValue)
-    {
-        computeTotals();
-        return this.totalTaxValue;
-    }
+    // public BigDecimal getTotalTaxValue(BigDecimal inputValue)
+    // {
+    //     computeTotals();
+    //     return this.totalTaxValue;
+    // }
 
-    public BigDecimal getTotalDiscountValue(BigDecimal inputValue)
-    {
-        computeTotals();
-        return this.totalDiscountValue;
-    }
+    // public BigDecimal getTotalDiscountValue(BigDecimal inputValue)
+    // {
+    //     computeTotals();
+    //     return this.totalDiscountValue;
+    // }
 
-    public BigDecimal getTotalChargesValue(BigDecimal inputValue)
-    {
-        computeTotals();
-        return this.totalChargesValue;
-    }
+    // public BigDecimal getTotalChargesValue(BigDecimal inputValue)
+    // {
+    //     computeTotals();
+    //     return this.totalChargesValue;
+    // }
 
-    public BigDecimal getFinalTotal()
-    {
-        computeTotals();
-        return this.finalTotal;
-    }
+    // public BigDecimal getFinalTotal()
+    // {
+    //     computeTotals();
+    //     return this.finalTotal;
+    // }
 
     public static void main(String st[]) throws Exception
     {

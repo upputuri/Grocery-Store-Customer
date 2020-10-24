@@ -1,6 +1,7 @@
 package com.dolittle.ecom.customer;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.security.Principal;
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -27,6 +28,7 @@ import org.springframework.jdbc.core.BatchPreparedStatementSetter;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.simple.SimpleJdbcInsert;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -55,18 +57,28 @@ public class OrderService {
 
         List<OrderSummary> orders = new ArrayList<OrderSummary>();
         String get_orders_sql = "select oid, cuid, said, shipping_cost, tax_percent, price, discounted_price, ios.name, item_order.created_ts "+
-                                "from item_order, item_order_status as ios where cuid=? and item_order.osid = ios.osid";
+                                "from item_order, item_order_status as ios where cuid=? and item_order.osid = ios.osid order by item_order.created_ts desc";
         try {
             orders = jdbcTemplateObject.query(get_orders_sql, new Object[]{cuid}, (rs, rowNum) -> {
                 OrderSummary os = new OrderSummary();
+                BigDecimal taxRate = rs.getBigDecimal("tax_percent");
+                BigDecimal totalChargesValue = rs.getBigDecimal("shipping_cost").setScale(2, RoundingMode.HALF_EVEN);
+                BigDecimal totalPriceAfterDiscounts = rs.getBigDecimal("discounted_price").setScale(2, RoundingMode.HALF_EVEN);
+                BigDecimal totalPriceAfterCharges = totalPriceAfterDiscounts.add(totalChargesValue);
+                totalPriceAfterCharges = totalPriceAfterCharges.setScale(2, RoundingMode.HALF_EVEN);
+                BigDecimal totalTaxValue = totalPriceAfterCharges.multiply(taxRate.divide(new BigDecimal(100)));
+                totalTaxValue = totalTaxValue.setScale(2, RoundingMode.HALF_EVEN);
+                BigDecimal totalPriceAfterTaxes = totalPriceAfterCharges.add(totalTaxValue);
+                totalPriceAfterTaxes = totalPriceAfterTaxes.setScale(2, RoundingMode.HALF_EVEN);
                 os.setOrderId(String.valueOf(rs.getInt("oid")));
                 os.setCustomerId(String.valueOf(rs.getInt("cuid")));
                 os.setShippingAddressId(String.valueOf(rs.getInt("said")));
-                os.setTotalChargesValue(rs.getBigDecimal("shipping_cost"));
-                os.setTotalTaxValue(rs.getBigDecimal("tax_percent"));
-                os.setOrderTotal(rs.getBigDecimal("price"));
-                os.setDiscountedTotal(rs.getBigDecimal("discounted_price"));
+                os.setOrderTotal(rs.getBigDecimal("price").setScale(2, RoundingMode.HALF_EVEN));
+                os.setDiscountedTotal(rs.getBigDecimal("discounted_price").setScale(2, RoundingMode.HALF_EVEN));
                 os.setOrderStatus(rs.getString("name"));
+                os.setTotalChargesValue(totalChargesValue);
+                os.setTotalTaxValue(totalTaxValue);
+                os.setFinalTotal(totalPriceAfterTaxes);
                 Calendar order_ts = Calendar.getInstance();
                 order_ts.setTimeInMillis(rs.getTimestamp("created_ts").getTime());
                 os.setCreatedTS(order_ts);
@@ -89,13 +101,16 @@ public class OrderService {
         log.info("Processing request to get Order detail for orderId: "+orderId);
         String get_order_sql = "select io.oid, io.cuid, io.said, io.shipping_cost, io.tax_percent, io.price, io.discounted_price, ios.name as status, io.created_ts, "+
                                 "sa.shipping_first_name, sa.shipping_last_name, sa.shipping_line1, sa.shipping_line2, sa.shipping_city, sa.shipping_zip_code, state.state, state.stid, "+
-                                "sa.shipping_mobile from item_order as io, item_order_status as ios, item_order_shipping_address as sa, state where io.oid=? and sa.oisaid = io.said "+
+                                "sa.shipping_mobile from item_order as io, item_order_status as ios, item_order_shipping_address as sa, state where io.oid=? and sa.oid = io.oid "+
                                 "and io.osid = ios.osid and sa.shipping_stid = state.stid";
         Order order = jdbcTemplateObject.queryForObject(get_order_sql, new Object[]{orderId}, (rs, rowNum) -> {
             Order o = new Order();
-            BigDecimal discountedTotal = rs.getBigDecimal("discounted_price");
-            BigDecimal taxRate = rs.getBigDecimal("tax_percent");
+            BigDecimal discountedTotal = rs.getBigDecimal("discounted_price").setScale(2, RoundingMode.HALF_EVEN);
+            BigDecimal taxRate = rs.getBigDecimal("tax_percent").setScale(2, RoundingMode.HALF_EVEN);
             BigDecimal totalTaxValue = discountedTotal.multiply(taxRate.divide(new BigDecimal(100)));
+            totalTaxValue = totalTaxValue.setScale(2, RoundingMode.HALF_EVEN);
+            BigDecimal totalPriceAfterTaxes = discountedTotal.add(totalTaxValue);
+            totalPriceAfterTaxes = totalPriceAfterTaxes.setScale(2, RoundingMode.HALF_EVEN);
             o.setId(String.valueOf(rs.getInt("oid")));
             o.setCustomerId(String.valueOf(rs.getInt("cuid")));
             o.setShippingAddressId(String.valueOf(rs.getInt("said")));
@@ -105,6 +120,7 @@ public class OrderService {
             o.setTotalTaxRate(taxRate);
             o.setTotalTaxValue(totalTaxValue);
             o.setOrderTotal(rs.getBigDecimal("price"));
+            o.setFinalTotal(totalPriceAfterTaxes);
             ShippingAddress sa = new ShippingAddress(rs.getString("shipping_line1"), rs.getString("shipping_city"), rs.getString("shipping_zip_code"), rs.getString("shipping_mobile"));
             sa.setId(String.valueOf(rs.getInt("said")));
             sa.setLine2(rs.getString("shipping_line2"));
@@ -181,11 +197,10 @@ public class OrderService {
         //                                         "shipping_line1, shipping_line2, shipping_city, shipping_zip_code, shipping_mobile, "+
         //                                         "billing_first_name, billing_last_name, billing_line1, billing_line2, billing_city, billing_zip_code) "+
         //                                         "values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-
         SimpleJdbcInsert jdbcInsert_shipping_address = new SimpleJdbcInsert(jdbcTemplateObject)
                                                         .usingColumns("oid", "shipping_first_name", "shipping_last_name", "shipping_line1", "shipping_line2",
-                                                                    "shipping_city", "shipping_zip_code", "shipping_mobile", "billing_first_name", "billing_last_name",
-                                                                    "billing_line1", "billing_line2", "billing_city", "billing_zip_code")
+                                                                    "shipping_city", "shipping_stid", "shipping_zip_code", "shipping_mobile", "billing_first_name", "billing_last_name",
+                                                                    "billing_line1", "billing_line2", "billing_city", "billing_stid", "billing_zip_code")
                                                         .withTableName("item_order_shipping_address");
 
         Map<String, Object> parameters_insert_shipping_address = new HashMap<String, Object>(1);
@@ -195,8 +210,16 @@ public class OrderService {
         parameters_insert_shipping_address.put("shipping_line1", order.getShippingAddress().getLine1());
         parameters_insert_shipping_address.put("shipping_line2", order.getShippingAddress().getLine2());
         parameters_insert_shipping_address.put("shipping_city", order.getShippingAddress().getCity());
+        parameters_insert_shipping_address.put("shipping_stid", order.getShippingAddress().getStateId());
         parameters_insert_shipping_address.put("shipping_zip_code", order.getShippingAddress().getZipcode());
         parameters_insert_shipping_address.put("shipping_mobile", order.getShippingAddress().getPhoneNumber());
+        parameters_insert_shipping_address.put("billing_first_name", order.getShippingAddress().getFirstName());
+        parameters_insert_shipping_address.put("billing_last_name", order.getShippingAddress().getLastName());
+        parameters_insert_shipping_address.put("billing_line1", order.getShippingAddress().getLine1());
+        parameters_insert_shipping_address.put("billing_line2", order.getShippingAddress().getLine2());
+        parameters_insert_shipping_address.put("billing_city", order.getShippingAddress().getCity());
+        parameters_insert_shipping_address.put("billing_stid", order.getShippingAddress().getStateId());
+        parameters_insert_shipping_address.put("billing_zip_code", order.getShippingAddress().getZipcode());
 
         jdbcInsert_shipping_address.execute(parameters_insert_shipping_address);
 
@@ -297,6 +320,28 @@ public class OrderService {
         order.setShippingAddress(deliveryAddress);
         order.setShippingAddressId(deliveryAddressId);
         return order;
+    }
+
+    @DeleteMapping(value = "/orders/{orderId}", produces="application/hal+json")
+    public void cancelOrder(@PathVariable String orderId, Principal principal){
+        try{
+            log.info("Processing request to cancel order Id: "+orderId);
+            Number customerId = jdbcTemplateObject.queryForObject("select cuid from item_order where oid=?", new Object[]{orderId}, Integer.TYPE);
+            assertAuthCustomerId(principal, customerId.toString());
+            String currentStatus = jdbcTemplateObject.queryForObject("select ios.name from item_order io, item_order_status ios where oid=? and io.osid = ios.osid",
+                                                                 new Object[]{orderId}, String.class);
+            if (currentStatus.trim().equals("Initial") || currentStatus.equals("Executing")){
+                jdbcTemplateObject.update("update item_order set osid = (select osid from item_order_status where name='Cancel Request') where oid=?", orderId);
+            }
+            else{
+                log.error("Invalid State of order. Order can not be cancelled in this state. OrderId: "+orderId);
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Can not cancel order in its current state. Request processing aborted");
+            }
+        }
+        catch(DataAccessException e){
+            log.error("An exception occurred while cancelling order with Id: "+orderId, e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "An internal error occurred!, pls retry after some time or pls call support");
+        }
     }
 
     private Customer assertAuthCustomerId(Principal principal, String customerId)
