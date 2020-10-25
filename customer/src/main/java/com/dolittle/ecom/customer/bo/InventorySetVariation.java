@@ -10,6 +10,7 @@ public @Data class InventorySetVariation extends RepresentationModel<InventorySe
     private String id;
     private String name;
     private BigDecimal price;
+    private BigDecimal priceAfterDiscount;
     private BigDecimal mrp;
     private String description;
 

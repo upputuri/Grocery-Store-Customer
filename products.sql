@@ -15,15 +15,37 @@ select * from item_attribute_group;
 select * from item_gi_attribute;
 select * from item_attribute_value;
 
+select * from item_item_photo;
+select * from cart_item_status;
+select * from cart_item;
+select * from cart;
+insert into cart (cuid) values (129); 
+select * from item_item;
+select * from item_gi;
+select * from item_gi_category;
+select * from item_item where iid="145";
+
+select * from offer;
+select * from offer_item;
+select * from offer_status;
+select * from offer_type;
+
 #Get products in a category as a page. Args 77, 10, 10
 select i.iid, i.name as item_name, i.description, i.price, i.item_discount, variations.price variation_price, variations.mrp as variation_mrp, variations.description as variation_desc,
-i.istatusid, p.imagefiles, p.title, s.name as status, s.description, min(variations.name) as variation_name, variations.isvid as variation_id
-from item_item as i, item_item_status as s, item_gi_category as ic, category as c, 
+i.istatusid, p.imagefiles, p.title, s.name as status, s.description, min(variations.name) as variation_name, variations.isvid as variation_id,
+offers.discount as offer_discount, offers.amount as offer_amount
+from item_item as i left join 
+(select oi.iid, discount, amount from offer_item oi, offer where offer.offid=oi.offid and offer.offsid=(select offsid from offer_status where name='Active')) as offers on (i.iid=offers.iid), 
+item_item_status as s, item_gi_category as ic, category as c,
 (select insv.isvid, insv.iid, insv.name, insv.description, price, mrp from inventory_set_variations as insv, inventory_set ins where ins.isvid = insv.isvid order by insv.name) as variations,
 (select iid, title, GROUP_CONCAT(image separator ',') as imagefiles from item_item_photo group by iid) as p
-where p.iid = i.iid and s.istatusid = i.istatusid and ic.giid = i.iid and c.catid = ic.catid and c.catid = 77 and variations.iid = i.iid
+where p.iid = i.iid and s.istatusid = i.istatusid and ic.giid = i.iid and c.catid = ic.catid and c.catid = 77 and variations.iid = i.iid 
+-- and offer.offid = ofi.offid and offer.offsid = (select offsid from offer_status where name='Active')
 group by i.iid 
 limit 0, 1000 ;
+
+select oi.iid, discount, amount from offer_item oi, offer where oi.offid=offer.offid and offer.offsid=(select offsid from offer_status where name='Active');
+select i.iid, offer_item.offiid, offer.offid from item_item i left join offer_item on (i.iid=offer_item.iid) left join offer on (offer.offid=offer_item.offid);
 
 #Get all unique iids in photo table, grouping them by iid and capturing all images as a comma separated list.
 select iid, title, GROUP_CONCAT(image separator ',') as imagefiles from item_item_photo group by iid;
@@ -55,27 +77,5 @@ select first_name, last_name, line1, line2, city, csa.cuid, csas.name
 from customer_shipping_address as csa, customer_shipping_address_status as csas
 where csa.cuid = 78 and csas.name like "Active" and csa.sasid = csas.sasid;
 
-#Add a new shipping address for a customer
-insert into customer_shipping_address (cuid, first_name, last_name, line1, line2, city, zip_code, sasid)
-values (130, "Srikanth", "Upputuri", "line one address", "line two address", "hyd", "500001", (select sasid from customer_shipping_address_status
-where name like 'active'));
-
-#Get all shipping addresses of a customer
-select sasid from customer_shipping_address_status where name like 'active';
-
-
-
-
-select * from customer_shipping_address where cuid=618;
-select * from customer_shipping_address_status;
 select iid, GROUP_CONCAT(image separator ',') from item_item_photo group by iid;
 
-select * from item_item_photo;
-select * from cart_item_status;
-select * from cart_item;
-select * from cart;
-insert into cart (cuid) values (129); 
-select * from item_item;
-select * from item_gi;
-select * from item_gi_category;
-select * from item_item where iid="145"

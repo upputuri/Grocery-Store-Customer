@@ -74,7 +74,7 @@ select oid, cuid, said, shipping_cost, tax_percent, price, discounted_price, ios
 #Get order detail
 select io.oid, io.cuid, io.said, io.shipping_cost, io.tax_percent, io.price, io.discounted_price, ios.name as status, io.created_ts,
                                 sa.shipping_first_name, sa.shipping_last_name, sa.shipping_line1, sa.shipping_line2, sa.shipping_city, sa.shipping_zip_code, state.state, state.stid,
-                                sa.shipping_mobile from item_order as io, item_order_status as ios, item_order_shipping_address as sa, state where io.oid=416 and sa.oid = io.oid 
+                                sa.shipping_mobile from item_order as io, item_order_status as ios, item_order_shipping_address as sa, state where io.oid=421 and sa.oid = io.oid 
                                 and io.osid = ios.osid and sa.shipping_stid = state.stid;
                                 
 #Cancel order

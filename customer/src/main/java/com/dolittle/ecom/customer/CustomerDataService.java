@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 
 import com.dolittle.ecom.customer.bo.Customer;
+import com.dolittle.ecom.customer.bo.CustomerQuery;
 import com.dolittle.ecom.customer.bo.ShippingAddress;
 import com.dolittle.ecom.customer.util.CustomerAppUtil;
 
@@ -293,15 +294,59 @@ public class CustomerDataService {
         }
     }
 
+    @Transactional
+    @PostMapping(value = "/customers/{customerId}/queries", produces = "application/hal+json")
+    public void createQuery(@RequestBody CustomerQuery query, @PathVariable String customerId, Principal principal)
+    {
+        log.info("Processing create query request for customer Id: "+customerId);
+        Customer c = assertAuthCustomerId(principal, customerId);
+        try{
+
+            SimpleJdbcInsert queryJdbcInsert = new SimpleJdbcInsert(jdbcTemplateObject)
+                                                    .usingColumns("cqiid", "cuid", "name", "email", "subject", "cqsid")
+                                                    .withTableName("customer_query")
+                                                    .usingGeneratedKeyColumns("cqid");
+
+            Map<String, Object> queryParams = new HashMap<String, Object>(1);
+            queryParams.put("name", c.getFName()+ " "+c.getLName());
+            queryParams.put("email", c.getEmail());
+            queryParams.put("cqiid", 1);
+            queryParams.put("cuid", customerId);
+            queryParams.put("subject", query.getSubject());        
+            queryParams.put("cqsid", 1);
+
+            Number cqid = queryJdbcInsert.executeAndReturnKey(queryParams);
+
+            SimpleJdbcInsert msgJdbcInsert = new SimpleJdbcInsert(jdbcTemplateObject)
+                                                    .usingColumns("uid", "cqid", "message", "user_type")
+                                                    .withTableName("customer_query_message");
+
+            Map<String, Object> msgParams = new HashMap<String, Object>(1);
+            msgParams.put("uid", c.getUid());
+            msgParams.put("cqid", cqid);
+            msgParams.put("user_type", 3);
+            msgParams.put("message", query.getDetail());        
+            msgJdbcInsert.execute(msgParams);
+        }
+        catch(DataAccessException e){
+            log.error("An exception occurred while inserting a new Shipping Address", e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "An internal error occurred!, pls retry after some time or pls call support");            
+        }
+    }
+
     private Customer assertAuthCustomerId(Principal principal, String customerId)
     {
         Customer customer = null;
-        String get_customer_profile_query = "select c.cuid from customer c "+
+        String get_customer_profile_query = "select c.cuid, c.uid, c.email, c.fname, c.lname from customer c "+
                                     "where c.email = ? and c.cuid = ? and c.custatusid = (select custatusid from customer_status where name='Active')";
         try{
             customer = jdbcTemplateObject.queryForObject(get_customer_profile_query, new Object[]{principal.getName(), customerId}, (rs, rownum) -> {
                 Customer c = new Customer();
                 c.setId(String.valueOf(rs.getInt("cuid")));
+                c.setUid(String.valueOf(rs.getInt("uid")));
+                c.setEmail(rs.getString("email"));
+                c.setFName(rs.getString("fname"));
+                c.setLName(rs.getString("lname"));
                 return c;
             });
         }
