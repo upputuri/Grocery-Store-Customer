@@ -88,29 +88,35 @@ public class ProductsService{
             */
         List<Product> prods = new ArrayList<Product>();
         try{
+            String score_col_sql = keywords.length() > 0 ? ", match (i.name, i.description, i.keywords) against (? IN BOOLEAN MODE) as score " : "";
+            String category_filter_sql = categoryId.length() >0 ? " and c.catid = ? ": "";
+            String keyword_match_sql = keywords.length() > 0 ? " and match (i.name, i.description, i.keywords) against (? IN BOOLEAN MODE) ":"";
+            String orderby_sql = keywords.length() > 0 ? " order by score desc ":"";
             String products_fetch_sql = "select i.iid, i.name as item_name, i.description, i.price, i.item_discount, variations.price variation_price, variations.mrp as variation_mrp, variations.description as variation_desc,"+
             "i.istatusid, p.imagefiles, p.title, s.name as status, s.description, min(variations.name) as variation_name, variations.isvid as variation_id, "+
-            "offers.discount as offer_discount, offers.amount as offer_amount "+
+            "offers.discount as offer_discount, offers.amount as offer_amount "+score_col_sql+
             "from item_item as i left join (select oi.iid, discount, amount from offer_item oi, offer where offer.offid=oi.offid and offer.offsid= "+
             "(select offsid from offer_status where name='Active')) as offers on (i.iid=offers.iid), "+
             "item_item_status as s, item_gi_category as ic, category as c, "+
             "(select insv.isvid, insv.iid, insv.name, insv.description, price, mrp from inventory_set_variations as insv, inventory_set ins where ins.isvid = insv.isvid order by insv.name) as variations, "+
             "(select iid, title, GROUP_CONCAT(image separator ',') as imagefiles from item_item_photo group by iid) as p "+
-            "where p.iid = i.iid and s.istatusid = i.istatusid and ic.giid = i.iid and c.catid = ic.catid and variations.iid = i.iid ";
+            "where p.iid = i.iid and s.istatusid = i.istatusid and ic.giid = i.iid and c.catid = ic.catid and variations.iid = i.iid "+
+            category_filter_sql+keyword_match_sql+" group by i.iid "+orderby_sql+" limit ?, ? "
             ;
 
             List<Object> params = new ArrayList<Object>(1);
+            if (keywords.length() > 0) {
+                params.add(keywords);
+            }
+
             if (categoryId.length() > 0) {
-                products_fetch_sql = products_fetch_sql+" and c.catid = ?";
                 params.add(categoryId);
             }
 
             if (keywords.length() > 0) {
-                products_fetch_sql = products_fetch_sql+ " and match (i.name, i.description, i.keywords) against (?)";
                 params.add(keywords);
             }
 
-            products_fetch_sql = products_fetch_sql + " group by i.iid limit ?, ? ";
             params.add(pageOffset);
             params.add(pageSize);
 

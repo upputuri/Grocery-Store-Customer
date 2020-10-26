@@ -262,7 +262,7 @@ public class OrderService {
         assertAuthCustomerId(principal, customerId);
         Order order = new Order();
         order.setCustomerId(customerId);
-        CollectionModel<CartItem> cartItemsModel = cartService.getCartItems(customerId);
+        CollectionModel<CartItem> cartItemsModel = cartService.getCartItems(customerId, principal);
         cartItemsModel.forEach((cartItem) -> {
             order.addOrderItem(cartItem.getOrderItem());
             log.debug("Adding cart item to order "+cartItem.toString());

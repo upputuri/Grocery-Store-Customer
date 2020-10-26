@@ -3,6 +3,10 @@ package com.dolittle.ecom.customer.bo;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonProperty.Access;
+
 import org.springframework.hateoas.RepresentationModel;
 
 import lombok.Data;
@@ -15,8 +19,20 @@ public @Data class CartItem extends RepresentationModel<CartItem>{
     private String imageURL;
     private String unitLabel;
     private int qty;
+    @JsonProperty(access = Access.READ_ONLY)
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
     private BigDecimal unitPrice = BigDecimal.ZERO;
+    @JsonProperty(access = Access.READ_ONLY)
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
+    private BigDecimal unitPriceAfterDiscount = BigDecimal.ZERO;
+    @JsonProperty(access = Access.READ_ONLY)
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
     private BigDecimal totalPrice = BigDecimal.ZERO;
+    @JsonProperty(access = Access.READ_ONLY)
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
+    private BigDecimal totalPriceAfterDiscount = BigDecimal.ZERO;
+    @JsonProperty(access = Access.READ_ONLY)
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
     private BigDecimal discount = BigDecimal.ZERO;
     private String productURL;
 
@@ -36,7 +52,7 @@ public @Data class CartItem extends RepresentationModel<CartItem>{
         oi.setName(this.productName);
         oi.setQtyUnit(this.unitLabel);
         oi.setOriginalPrice(this.unitPrice);
-        oi.setPriceAfterDiscount(this.unitPrice);
+        oi.setPriceAfterDiscount(this.unitPriceAfterDiscount);
         return oi;
     }
 
@@ -77,13 +93,21 @@ public @Data class CartItem extends RepresentationModel<CartItem>{
     //     this.qty = qty;
     // }
 
-    // public double getUnitPrice() {
-    //     return unitPrice;
-    // }
+    public void setUnitPrice(BigDecimal unitPrice) {
+        this.unitPrice = unitPrice.setScale(2, RoundingMode.HALF_EVEN);
+    }
 
-    // public void setUnitPrice(double unitPrice) {
-    //     this.unitPrice = unitPrice;
-    // }
+    public void setUnitPriceAfterDiscount(BigDecimal unitPriceAfterDiscount) {
+        this.unitPriceAfterDiscount = unitPriceAfterDiscount.setScale(2, RoundingMode.HALF_EVEN);
+    }
+    
+    public void setTotalPrice(BigDecimal totalPrice) {
+        this.totalPrice =  totalPrice.setScale(2, RoundingMode.HALF_EVEN);;
+    }
+
+    public void setTotalPriceAfterDiscount(BigDecimal totalPriceAfterDiscount) {
+        this.totalPriceAfterDiscount = totalPriceAfterDiscount.setScale(2, RoundingMode.HALF_EVEN);
+    }
 
     // public String getProductURL() {
     //     return productURL;

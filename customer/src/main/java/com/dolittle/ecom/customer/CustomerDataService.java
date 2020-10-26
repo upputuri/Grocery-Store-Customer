@@ -171,7 +171,7 @@ public class CustomerDataService {
     public void editProfile(@PathVariable String customerId, @RequestBody Customer profile, Principal principal)
     {
         log.info("Processing edit profile request for customer Id: "+customerId);
-        assertAuthCustomerId(principal, customerId);
+        CustomerAppUtil.assertAuthCustomerId(jdbcTemplateObject, principal, customerId);
 
         DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");  
         String strDate = profile.getDob() != null ? dateFormat.format(profile.getDob()) : null;  
@@ -192,7 +192,7 @@ public class CustomerDataService {
     public CollectionModel<ShippingAddress> getCustomerAddresses(@PathVariable(value = "id") String customerId, Principal principal)
     {
         log.info("Processing request Get Customer Addressses for customer Id {}"+customerId);
-        assertAuthCustomerId(principal, customerId);
+        CustomerAppUtil.assertAuthCustomerId(jdbcTemplateObject, principal, customerId);
         try{
             List<ShippingAddress> addressList = new ArrayList<ShippingAddress>();
             String get_customer_addresses = "select sa.said, sa.first_name, sa.last_name, sa.line1, sa.line2, sa.zip_code, sa.mobile, sa.city, sa.stid, state.state "+
@@ -233,7 +233,7 @@ public class CustomerDataService {
             //                 "values (?, ?, ?, ?, ?, ?, ?, (select sasid from customer_shipping_address_status "+
             //                 "where name like 'active'))";   
             log.info("Processing request to add new address to customer Id {}", customerId);
-            assertAuthCustomerId(principal, customerId);
+            CustomerAppUtil.assertAuthCustomerId(jdbcTemplateObject, principal, customerId);
             String sql = "select sasid from customer_shipping_address_status where name = 'Active'";
             int sasid = jdbcTemplateObject.queryForObject(sql, Integer.TYPE);
 
@@ -274,7 +274,7 @@ public class CustomerDataService {
     {
         try{  
             log.info("Processing request to update address of customer Id {} with addressId {}", customerId, address.getId());
-            assertAuthCustomerId(principal, customerId);
+            CustomerAppUtil.assertAuthCustomerId(jdbcTemplateObject, principal, customerId);
             String address_update_sql = "update customer_shipping_address set first_name=?, last_name=?, line1=?, line2=?, city=?, zip_code=?, mobile=?, stid=? "+
                                         "where said=?";
                             
@@ -299,7 +299,7 @@ public class CustomerDataService {
     public void createQuery(@RequestBody CustomerQuery query, @PathVariable String customerId, Principal principal)
     {
         log.info("Processing create query request for customer Id: "+customerId);
-        Customer c = assertAuthCustomerId(principal, customerId);
+        Customer c = CustomerAppUtil.assertAuthCustomerId(jdbcTemplateObject, principal, customerId);
         try{
 
             SimpleJdbcInsert queryJdbcInsert = new SimpleJdbcInsert(jdbcTemplateObject)
@@ -334,28 +334,6 @@ public class CustomerDataService {
         }
     }
 
-    private Customer assertAuthCustomerId(Principal principal, String customerId)
-    {
-        Customer customer = null;
-        String get_customer_profile_query = "select c.cuid, c.uid, c.email, c.fname, c.lname from customer c "+
-                                    "where c.email = ? and c.cuid = ? and c.custatusid = (select custatusid from customer_status where name='Active')";
-        try{
-            customer = jdbcTemplateObject.queryForObject(get_customer_profile_query, new Object[]{principal.getName(), customerId}, (rs, rownum) -> {
-                Customer c = new Customer();
-                c.setId(String.valueOf(rs.getInt("cuid")));
-                c.setUid(String.valueOf(rs.getInt("uid")));
-                c.setEmail(rs.getString("email"));
-                c.setFName(rs.getString("fname"));
-                c.setLName(rs.getString("lname"));
-                return c;
-            });
-        }
-        catch(EmptyResultDataAccessException e)
-        {
-            log.error("Requested customer Id does not match with authenticated user or the customer is inactive");
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "You do not have permission to view details of the provided customer Id");
-        }
-        return customer;
-    }
+
 
 }
