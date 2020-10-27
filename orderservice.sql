@@ -79,6 +79,11 @@ select io.oid, io.cuid, io.said, io.shipping_cost, io.tax_percent, io.price, io.
                                 
 #Cancel order
 update item_order set osid = (select osid from item_order_status where name='Cancel Request') where oid=432;
+
+#Get promocode
+select * from promo_code;
+select pcid, code, quantity, discount, order_amount, now() between valid_from and valid_to as isactive from promo_code where code='JGBJ3638';
+select pcid, valid_from, valid_to, quantity, discount, order_amount from promo_code where code='JGBJ3638';
                                 
                                 
                                 

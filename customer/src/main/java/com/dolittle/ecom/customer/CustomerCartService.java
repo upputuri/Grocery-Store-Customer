@@ -44,12 +44,13 @@ public class CustomerCartService
     {
         log.info("Processing request to get cart items of customer Id: "+customerId);
         try{
-            String sql = "select c.cartid, ci.cartiid, ci.iid, ci.isvid, ci.cartisid, ci.quantity, ii.name as item_name, ii.price as item_price, ii.item_discount, ins.price as variant_price, insv.name as variant_name, "+
+            String sql = "select c.cartid, ci.cartiid, ci.iid, ci.isvid, ci.cartisid, ci.quantity, ii.name as item_name, iip.image, ii.price as item_price, ii.item_discount, ins.price as variant_price, insv.name as variant_name, "+
             "offers.discount as offer_discount, offers.amount as offer_amount "+
             "from cart as c, cart_item as ci, cart_item_status as cis, item_item as ii left join (select oi.iid, discount, amount from offer_item oi, offer where offer.offid=oi.offid and offer.offsid= "+
             "(select offsid from offer_status where name='Active')) as offers on (ii.iid=offers.iid), "+
-            "inventory_set as ins, inventory_set_variations as insv "+
-            "where c.cuid = ? and c.cartid = ci.cartid and ci.iid = ii.iid and ci.cartisid = cis.cartisid and ins.isvid = ci.isvid and insv.isvid = ci.isvid "+
+            "inventory_set as ins, inventory_set_variations as insv, "+
+            "(select iid, title, image from item_item_photo group by iid) as iip "+
+            "where c.cuid = ? and c.cartid = ci.cartid and iip.iid = ii.iid and ci.iid = ii.iid and ci.cartisid = cis.cartisid and ins.isvid = ci.isvid and insv.isvid = ci.isvid "+
             "and cis.name like 'active'";
 
             List<CartItem> cartItems = jdbcTemplateObject.query( sql, new Object[]{customerId} , (rs, rowNumber) -> {
@@ -64,6 +65,7 @@ public class CustomerCartService
                     ci.setDiscount(offerDiscount);
                     ci.setUnitLabel(rs.getString("variant_name"));
                     ci.setProductName(rs.getString("item_name"));
+                    ci.setImage(rs.getString("image"));
                     int qty = rs.getInt("quantity");
                     ci.setQty(qty);
                     //BigDecimal item_price = rs.getBigDecimal("item_price");

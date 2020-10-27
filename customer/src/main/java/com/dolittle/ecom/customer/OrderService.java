@@ -16,6 +16,7 @@ import com.dolittle.ecom.customer.bo.OrderContext;
 import com.dolittle.ecom.customer.bo.OrderItem;
 import com.dolittle.ecom.customer.bo.OrderSummary;
 import com.dolittle.ecom.customer.bo.ShippingAddress;
+import com.dolittle.ecom.customer.bo.general.PromoCode;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
@@ -48,6 +49,9 @@ public class OrderService {
 
     @Autowired
     CustomerCartService cartService;
+
+    @Autowired
+    CustomerApplication customerApp;
 
     @GetMapping(value = "/orders", produces = "application/hal+json")
     public CollectionModel<OrderSummary> getOrders(@RequestParam String cuid, Principal principal)
@@ -169,12 +173,12 @@ public class OrderService {
 
         log.info("Beginning to create an order for customer - "+orderContext.getCustomerId());
         assertAuthCustomerId(principal, orderContext.getCustomerId());
-        Order preOrder = this.getPreOrder(orderContext.getCustomerId(), orderContext.getDeliveryAddressId(), principal);
+        Order preOrder = this.createPreOrder(orderContext, principal);
 
         int osid = jdbcTemplateObject.queryForObject("select osid from item_order_status where name='Initial'", Integer.TYPE);
 
         SimpleJdbcInsert jdbcInsert_Order = new SimpleJdbcInsert(jdbcTemplateObject)
-                                            .usingColumns("cuid", "said", "taxproid", "tax_percent", "tax_type", "price", "discounted_price", "osid")
+                                            .usingColumns("cuid", "said", "taxproid", "tax_percent", "tax_type", "price", "discounted_price", "pcid", "osid")
                                             .withTableName("item_order")
                                             .usingGeneratedKeyColumns("oid");
 
@@ -186,6 +190,7 @@ public class OrderService {
         parameters_insert_order.put("tax_type", preOrder.getTaxType());        
         parameters_insert_order.put("price", preOrder.getOrderTotal());
         parameters_insert_order.put("discounted_price", preOrder.getDiscountedTotal());
+        parameters_insert_order.put("pcid", preOrder.getAppliedPromoCodeIdList().get(0));
         parameters_insert_order.put("osid", osid);
 
         Number oid = jdbcInsert_Order.executeAndReturnKey(parameters_insert_order);
@@ -255,14 +260,14 @@ public class OrderService {
         return order;
     }
 
-    @GetMapping(value = "/orders/preorder", produces = "application/hal+json")
-    public Order getPreOrder(@RequestParam String customerId, @RequestParam String deliveryAddressId, Principal principal)
+    @PostMapping(value = "/orders/preorders", produces = "application/hal+json")
+    public Order createPreOrder(@RequestBody OrderContext context , Principal principal)
     {
-        log.info("Beginning to create a preorder for customer - "+customerId);
-        assertAuthCustomerId(principal, customerId);
+        log.info("Beginning to create a preorder for customer - "+context.getCustomerId());
+        assertAuthCustomerId(principal, context.getCustomerId());
         Order order = new Order();
-        order.setCustomerId(customerId);
-        CollectionModel<CartItem> cartItemsModel = cartService.getCartItems(customerId, principal);
+        order.setCustomerId(context.getCustomerId());
+        CollectionModel<CartItem> cartItemsModel = cartService.getCartItems(context.getCustomerId(), principal);
         cartItemsModel.forEach((cartItem) -> {
             order.addOrderItem(cartItem.getOrderItem());
             log.debug("Adding cart item to order "+cartItem.toString());
@@ -275,11 +280,18 @@ public class OrderService {
             private BigDecimal rate;
         }
 
+
         //Add promo code discounts to order
-        // cartContext.getPromoCodes().stream().map((code) -> {
-            //order.addDiscount(...)
-            
-            // });
+        List<String> promoCodeIdList = new ArrayList<String>();
+        context.getPromoCodes().forEach((code) -> {
+            PromoCode promoCode = customerApp.getPromoCodeDetail(code);
+            if (promoCode.isValid()){
+                promoCodeIdList.add(promoCode.getId());
+                order.addDiscount("_code_"+code, promoCode.getDiscount(), promoCode.getDiscountType());
+            }
+            return;
+        });
+        order.setAppliedPromoCodeIdList(promoCodeIdList);
         //order.addCharge(...)
 
         String query_tax_detail_sql = "select taxproid, name, rate, tax_type from tax_profile as t where t.default = 1";
@@ -303,7 +315,7 @@ public class OrderService {
         String get_delivery_address_sql = "select sa.said, sa.first_name, sa.last_name, sa.line1, sa.line2, sa.zip_code, sa.mobile, sa.city, sa.stid, state.state "+
                                             "from customer_shipping_address sa, state where sa.said = ? and sa.stid = state.stid";
                                             
-        ShippingAddress deliveryAddress = jdbcTemplateObject.queryForObject(get_delivery_address_sql, new Object[]{deliveryAddressId}, (rs, rowNum) -> {
+        ShippingAddress deliveryAddress = jdbcTemplateObject.queryForObject(get_delivery_address_sql, new Object[]{context.getDeliveryAddressId()}, (rs, rowNum) -> {
             ShippingAddress sa = new ShippingAddress(rs.getString("line1"), rs.getString("city"), rs.getString("zip_code"), rs.getString("mobile"));
             sa.setId(String.valueOf(rs.getInt("said")));
             sa.setLine2(rs.getString("line2"));
@@ -311,14 +323,14 @@ public class OrderService {
             sa.setLastName(rs.getString("last_name"));
             sa.setState(rs.getString("state"));
             sa.setStateId(rs.getInt("stid"));
-            Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getPreOrder(null, null, null)).withSelfRel();
+            Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).createPreOrder(context, principal)).withSelfRel();
             sa.add(selfLink);
             return sa;
         });
-        Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getPreOrder(null, null, null)).withSelfRel();
+        Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).createPreOrder(context, principal)).withSelfRel();
         order.add(selfLink);
         order.setShippingAddress(deliveryAddress);
-        order.setShippingAddressId(deliveryAddressId);
+        order.setShippingAddressId(context.getDeliveryAddressId());
         return order;
     }
 

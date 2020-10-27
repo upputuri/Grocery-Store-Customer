@@ -16,7 +16,7 @@ public @Data class CartItem extends RepresentationModel<CartItem>{
     private final String productId;
     private final String variationId;
     private String productName;
-    private String imageURL;
+    private String image;
     private String unitLabel;
     private int qty;
     @JsonProperty(access = Access.READ_ONLY)

@@ -87,11 +87,26 @@ ADD FULLTEXT(name, description, keywords);
 select ii.iid, ii.name, ii.keywords from item_item ii where match(name, description, keywords) against ('bag dem waLLeT');
 
 select i.iid, i.name as item_name, i.description, i.price, i.item_discount, variations.price variation_price, variations.mrp as variation_mrp, 
+variations.description as variation_desc,i.istatusid, p.imagefiles, p.title, min(variations.name) as variation_name, 
+variations.isvid as variation_id, offers.discount as offer_discount, offers.amount as offer_amount,
+match (i.name, i.description, i.keywords) against ('vita* apple*' in boolean mode) as score
+from item_item as i left join (select oi.iid, discount, amount from offer_item oi, offer where offer.offid=oi.offid and offer.offsid= (select offsid from offer_status where name='Active')) as offers 
+on (i.iid=offers.iid), item_item_status as s, item_gi_category as ic, category as c, (select insv.isvid, insv.iid, insv.name, insv.description, price, mrp from inventory_set_variations as insv, 
+inventory_set ins where ins.isvid = insv.isvid order by insv.name) as variations, (select iid, title, GROUP_CONCAT(image separator ',') as imagefiles from 
+item_item_photo group by iid) as p where p.iid = i.iid and s.istatusid = i.istatusid and s.name = 'Active' and ic.giid = i.iid and c.catid = ic.catid and variations.iid = i.iid  
+and c.catid = 77 and match (i.name, i.description, i.keywords) against ('vita* apple*' in boolean mode) group by i.iid order by score desc limit 0,2; 
+
+select count(*) from (select i.iid, i.name as item_name, i.description, i.price, i.item_discount, variations.price variation_price, variations.mrp as variation_mrp, 
 variations.description as variation_desc,i.istatusid, p.imagefiles, p.title, s.name as status, s.description, min(variations.name) as variation_name, 
 variations.isvid as variation_id, offers.discount as offer_discount, offers.amount as offer_amount,
-match (i.name, i.description, i.keywords) against ('vita* mango*' in boolean mode) as score
+match (i.name, i.description, i.keywords) against ('vita* apple*' in boolean mode) as score
 from item_item as i left join (select oi.iid, discount, amount from offer_item oi, offer where offer.offid=oi.offid and offer.offsid= (select offsid from offer_status where name='Active')) as offers 
 on (i.iid=offers.iid), item_item_status as s, item_gi_category as ic, category as c, (select insv.isvid, insv.iid, insv.name, insv.description, price, mrp from inventory_set_variations as insv, 
 inventory_set ins where ins.isvid = insv.isvid order by insv.name) as variations, (select iid, title, GROUP_CONCAT(image separator ',') as imagefiles from 
 item_item_photo group by iid) as p where p.iid = i.iid and s.istatusid = i.istatusid and ic.giid = i.iid and c.catid = ic.catid and variations.iid = i.iid  
-and c.catid = 77 and match (i.name, i.description, i.keywords) against ('vita* mango*' in boolean mode) group by i.iid order by score desc limit 0,1000; 
+and c.catid = 77 and match (i.name, i.description, i.keywords) against ('vita* apple*' in boolean mode) group by i.iid order by score desc ) as t;
+
+select iid, title, image from item_item_photo where iid=20 group by iid ;
+
+select * from item_item group by giid limit 0, 10;
+select  count(*) from item_item group by giid;
