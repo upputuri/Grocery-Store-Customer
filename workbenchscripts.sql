@@ -66,7 +66,7 @@ select sasid from customer_shipping_address_status where name like 'active';
 
 
 
-select * from customer_shipping_address where cuid=131;
+select * from customer_shipping_address where cuid=618;
 select * from customer_shipping_address_status;
 select iid, GROUP_CONCAT(image separator ',') from item_item_photo group by iid;
 

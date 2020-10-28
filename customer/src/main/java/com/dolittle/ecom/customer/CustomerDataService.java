@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 
 import com.dolittle.ecom.customer.bo.Customer;
+import com.dolittle.ecom.customer.bo.CustomerQuery;
 import com.dolittle.ecom.customer.bo.ShippingAddress;
 import com.dolittle.ecom.customer.util.CustomerAppUtil;
 
@@ -170,7 +171,7 @@ public class CustomerDataService {
     public void editProfile(@PathVariable String customerId, @RequestBody Customer profile, Principal principal)
     {
         log.info("Processing edit profile request for customer Id: "+customerId);
-        assertAuthCustomerId(principal, customerId);
+        CustomerAppUtil.assertAuthCustomerId(jdbcTemplateObject, principal, customerId);
 
         DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");  
         String strDate = profile.getDob() != null ? dateFormat.format(profile.getDob()) : null;  
@@ -191,7 +192,7 @@ public class CustomerDataService {
     public CollectionModel<ShippingAddress> getCustomerAddresses(@PathVariable(value = "id") String customerId, Principal principal)
     {
         log.info("Processing request Get Customer Addressses for customer Id {}"+customerId);
-        assertAuthCustomerId(principal, customerId);
+        CustomerAppUtil.assertAuthCustomerId(jdbcTemplateObject, principal, customerId);
         try{
             List<ShippingAddress> addressList = new ArrayList<ShippingAddress>();
             String get_customer_addresses = "select sa.said, sa.first_name, sa.last_name, sa.line1, sa.line2, sa.zip_code, sa.mobile, sa.city, sa.stid, state.state "+
@@ -232,7 +233,7 @@ public class CustomerDataService {
             //                 "values (?, ?, ?, ?, ?, ?, ?, (select sasid from customer_shipping_address_status "+
             //                 "where name like 'active'))";   
             log.info("Processing request to add new address to customer Id {}", customerId);
-            assertAuthCustomerId(principal, customerId);
+            CustomerAppUtil.assertAuthCustomerId(jdbcTemplateObject, principal, customerId);
             String sql = "select sasid from customer_shipping_address_status where name = 'Active'";
             int sasid = jdbcTemplateObject.queryForObject(sql, Integer.TYPE);
 
@@ -273,7 +274,7 @@ public class CustomerDataService {
     {
         try{  
             log.info("Processing request to update address of customer Id {} with addressId {}", customerId, address.getId());
-            assertAuthCustomerId(principal, customerId);
+            CustomerAppUtil.assertAuthCustomerId(jdbcTemplateObject, principal, customerId);
             String address_update_sql = "update customer_shipping_address set first_name=?, last_name=?, line1=?, line2=?, city=?, zip_code=?, mobile=?, stid=? "+
                                         "where said=?";
                             
@@ -293,24 +294,46 @@ public class CustomerDataService {
         }
     }
 
-    private Customer assertAuthCustomerId(Principal principal, String customerId)
+    @Transactional
+    @PostMapping(value = "/customers/{customerId}/queries", produces = "application/hal+json")
+    public void createQuery(@RequestBody CustomerQuery query, @PathVariable String customerId, Principal principal)
     {
-        Customer customer = null;
-        String get_customer_profile_query = "select c.cuid from customer c "+
-                                    "where c.email = ? and c.cuid = ? and c.custatusid = (select custatusid from customer_status where name='Active')";
+        log.info("Processing create query request for customer Id: "+customerId);
+        Customer c = CustomerAppUtil.assertAuthCustomerId(jdbcTemplateObject, principal, customerId);
         try{
-            customer = jdbcTemplateObject.queryForObject(get_customer_profile_query, new Object[]{principal.getName(), customerId}, (rs, rownum) -> {
-                Customer c = new Customer();
-                c.setId(String.valueOf(rs.getInt("cuid")));
-                return c;
-            });
+
+            SimpleJdbcInsert queryJdbcInsert = new SimpleJdbcInsert(jdbcTemplateObject)
+                                                    .usingColumns("cqiid", "cuid", "name", "email", "subject", "cqsid")
+                                                    .withTableName("customer_query")
+                                                    .usingGeneratedKeyColumns("cqid");
+
+            Map<String, Object> queryParams = new HashMap<String, Object>(1);
+            queryParams.put("name", c.getFName()+ " "+c.getLName());
+            queryParams.put("email", c.getEmail());
+            queryParams.put("cqiid", 1);
+            queryParams.put("cuid", customerId);
+            queryParams.put("subject", query.getSubject());        
+            queryParams.put("cqsid", 1);
+
+            Number cqid = queryJdbcInsert.executeAndReturnKey(queryParams);
+
+            SimpleJdbcInsert msgJdbcInsert = new SimpleJdbcInsert(jdbcTemplateObject)
+                                                    .usingColumns("uid", "cqid", "message", "user_type")
+                                                    .withTableName("customer_query_message");
+
+            Map<String, Object> msgParams = new HashMap<String, Object>(1);
+            msgParams.put("uid", c.getUid());
+            msgParams.put("cqid", cqid);
+            msgParams.put("user_type", 3);
+            msgParams.put("message", query.getDetail());        
+            msgJdbcInsert.execute(msgParams);
         }
-        catch(EmptyResultDataAccessException e)
-        {
-            log.error("Requested customer Id does not match with authenticated user or the customer is inactive");
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "You do not have permission to view details of the provided customer Id");
+        catch(DataAccessException e){
+            log.error("An exception occurred while inserting a new Shipping Address", e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "An internal error occurred!, pls retry after some time or pls call support");            
         }
-        return customer;
     }
+
+
 
 }

@@ -2,11 +2,15 @@ package com.dolittle.ecom.customer;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.security.Principal;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
+import java.util.ArrayList;
 import java.util.List;
 
+import com.dolittle.ecom.customer.bo.Cart;
 import com.dolittle.ecom.customer.bo.CartItem;
+import com.dolittle.ecom.customer.util.CustomerAppUtil;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
@@ -36,38 +40,52 @@ public class CustomerCartService
     JdbcTemplate jdbcTemplateObject;
 
     @GetMapping(value="/customers/{id}/cart/items", produces="application/hal+json")
-    public CollectionModel<CartItem> getCartItems(@PathVariable(value="id", required = true) String customerId)
+    public CollectionModel<CartItem> getCartItems(@PathVariable(value="id", required = true) String customerId, Principal principal)
     {
+        log.info("Processing request to get cart items of customer Id: "+customerId);
         try{
-            String sql = "select c.cartid, ci.cartiid, ci.iid, ci.isvid, ci.cartisid, ci.quantity, ii.name as item_name, ii.price as item_price, ii.item_discount, ins.price as variant_price, insv.name as variant_name "+
-            "from cart as c, cart_item as ci, cart_item_status as cis, item_item as ii, inventory_set as ins, inventory_set_variations as insv "+
-            "where c.cuid = ? and c.cartid = ci.cartid and ci.iid = ii.iid and ci.cartisid = cis.cartisid and ins.isvid = ci.isvid and insv.isvid = ci.isvid "+
+            String sql = "select c.cartid, ci.cartiid, ci.iid, ci.isvid, ci.cartisid, ci.quantity, ii.name as item_name, iip.image, ii.price as item_price, ii.item_discount, ins.price as variant_price, insv.name as variant_name, "+
+            "offers.discount as offer_discount, offers.amount as offer_amount "+
+            "from cart as c, cart_item as ci, cart_item_status as cis, item_item as ii left join (select oi.iid, discount, amount from offer_item oi, offer where offer.offid=oi.offid and offer.offsid= "+
+            "(select offsid from offer_status where name='Active')) as offers on (ii.iid=offers.iid), "+
+            "inventory_set as ins, inventory_set_variations as insv, "+
+            "(select iid, title, image from item_item_photo group by iid) as iip "+
+            "where c.cuid = ? and c.cartid = ci.cartid and iip.iid = ii.iid and ci.iid = ii.iid and ci.cartisid = cis.cartisid and ins.isvid = ci.isvid and insv.isvid = ci.isvid "+
             "and cis.name like 'active'";
 
             List<CartItem> cartItems = jdbcTemplateObject.query( sql, new Object[]{customerId} , (rs, rowNumber) -> {
                 CartItem ci = new CartItem(String.valueOf(rs.getInt("iid")), String.valueOf(rs.getInt("isvid")));
+                    BigDecimal offerDiscount = rs.getBigDecimal("offer_discount");
+                    BigDecimal variationPrice = rs.getBigDecimal("variant_price");
+                    BigDecimal variationPriceAfterDiscount = variationPrice;
+                    if (offerDiscount != null) {
+                        variationPriceAfterDiscount = variationPrice.subtract(variationPrice.multiply(offerDiscount.divide(new BigDecimal(100))));
+                    }
                     ci.setCartItemId(String.valueOf(rs.getInt("cartiid")));
-                    ci.setDiscount(rs.getBigDecimal("item_discount"));
+                    ci.setDiscount(offerDiscount);
                     ci.setUnitLabel(rs.getString("variant_name"));
                     ci.setProductName(rs.getString("item_name"));
+                    ci.setImage(rs.getString("image"));
                     int qty = rs.getInt("quantity");
                     ci.setQty(qty);
                     //BigDecimal item_price = rs.getBigDecimal("item_price");
-                    BigDecimal variant_price = rs.getBigDecimal("variant_price");
+                    // BigDecimal variant_price = rs.getBigDecimal("variant_price");
                     //BigDecimal chosen_price = item_price.compareTo(BigDecimal.ZERO)>0 ? item_price : variant_price;
                     //BigDecimal discount = rs.getBigDecimal("item_discount");
                     
                     //BigDecimal final_price = variant_price.multiply(BigDecimal.ONE.subtract(discount)).setScale(2, RoundingMode.HALF_EVEN);
                     
-                    ci.setUnitPrice(variant_price);
-                    ci.setTotalPrice(variant_price.multiply(new BigDecimal(qty)));
+                    ci.setUnitPrice(variationPrice);
+                    ci.setUnitPriceAfterDiscount(variationPriceAfterDiscount);
+                    ci.setTotalPrice(variationPrice.multiply(new BigDecimal(qty)));
+                    ci.setTotalPriceAfterDiscount(variationPriceAfterDiscount.multiply(new BigDecimal(qty)));
                     Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getCartItem(customerId, rs.getString("cartiid"))).withSelfRel();
                     ci.add(selfLink);
                     //BigDecimal price = final_price.             
                     return ci;
             }
             );
-            Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getCartItems(customerId)).withSelfRel();
+            Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getCartItems(customerId, principal)).withSelfRel();
             return CollectionModel.of(cartItems, selfLink);
         }
         catch(DataAccessException e)
@@ -76,14 +94,28 @@ public class CustomerCartService
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "An internal error occurred!, pls retry after some time or pls call support");
         }        
     }
-
+    
+    @GetMapping(value="/customers/{id}/cart", produces="application/hal+json")
+    public Cart getCart(@PathVariable(value="id", required = true) String customerId, Principal principal)
+    {
+        log.info("Processing request to get cart");
+        CustomerAppUtil.assertAuthCustomerId(jdbcTemplateObject, principal, customerId);
+        Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getCart(customerId, principal)).withSelfRel();
+        Cart cart = new Cart();
+        cart.setCartItems(new ArrayList<CartItem>(getCartItems(customerId, principal).getContent()));
+        cart.add(selfLink);
+        return cart;
+    }
+    
     //This can very well be made a void function. Returning a cartitem may not be necessary.
     @Transactional
     @PostMapping(value = "/customers/{customerId}/cart", produces = "application/hal+json")
-    public CartItem addOrUpdateItemToCart(@PathVariable(value="customerId", required = true) String customerId, @RequestBody CartItem cartItem)
+    public CartItem addOrUpdateItemToCart(@PathVariable(value="customerId", required = true) String customerId, @RequestBody CartItem cartItem, Principal principal)
     {
         // If user doesn't have a cart yet, create a cart?
         // Receives - productId, is_variation, qty
+        log.info("Processing request to add/update item to cart for customer Id: "+customerId);
+        CustomerAppUtil.assertAuthCustomerId(jdbcTemplateObject, principal, customerId);
         try{
             String check_cartitem_exists_sql = "select cartiid from cart_item where cartid = (select cartid from cart where cuid = ?) and iid= ? and isvid = ? "+
                                                 "and cartisid=(select cartisid from cart_item_status where name='Active') limit 0,1";

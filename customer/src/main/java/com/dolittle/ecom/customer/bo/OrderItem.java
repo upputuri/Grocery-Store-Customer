@@ -22,6 +22,8 @@ public @Data class OrderItem extends RepresentationModel<OrderItem>{
     @JsonFormat(shape = JsonFormat.Shape.STRING)    
     private BigDecimal priceAfterDiscount = BigDecimal.ZERO;
     @JsonFormat(shape = JsonFormat.Shape.STRING) 
+    private BigDecimal totalOriginalPrice = BigDecimal.ZERO;
+    @JsonFormat(shape = JsonFormat.Shape.STRING) 
     private BigDecimal totalPriceAfterDiscount = BigDecimal.ZERO;
 
     public OrderItem(String productId, String insvid, int qty)
@@ -49,6 +51,8 @@ public @Data class OrderItem extends RepresentationModel<OrderItem>{
     }
 
     private void computeTotals(){
+        this.totalOriginalPrice = this.originalPrice.multiply(new BigDecimal(this.qty));
+        this.totalOriginalPrice = this.totalOriginalPrice.setScale(2, RoundingMode.HALF_EVEN);
         this.totalPriceAfterDiscount = this.priceAfterDiscount.multiply(new BigDecimal(this.qty));
         this.totalPriceAfterDiscount = this.totalPriceAfterDiscount.setScale(2, RoundingMode.HALF_EVEN);
     }

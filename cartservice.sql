@@ -34,7 +34,8 @@ delete from cart_item where cartiid=672;
 insert into inventory_set_variations (iid, name, description, showing, isvsid) values (130, "250GM", "1pc guava", 1, 1);
 select * from cart_item_status;
 
-select COALESCE(sum(quantity),0) from cart_item where cartid=(select cartid from cart where cuid=618);
+select COALESCE(sum(quantity),0) from cart_item 
+where cartid=(select cartid from cart where cuid=630) and cartisid=(select cartisid from cart_item_status where name='Active');
 
 UPDATE cart_item 
    SET cartisid = CASE WHEN quantity = 1 THEN (select cartisid from cart_item_status where name='Inactive') else cartisid END,

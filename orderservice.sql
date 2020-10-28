@@ -10,6 +10,7 @@ select * from cart_item;
 select * from inventory_set_variations;
 select * from cart;
 select * from cart_item_status;
+select * from state;
 
 select * from promo_code;
 select * from promo_code_type;
@@ -64,3 +65,27 @@ from customer_shipping_address sa, state where sa.said = 41 and sa.stid = state.
 
 #Get payment options
 select cpo.cpoid, cpo.cptid , cpo.name, cpo.description from customer_payment_option cpo, customer_payment_option_status cpos where cptid=2 and cpo.cposid = cpos.cposid;
+
+#Get orders
+select oid, cuid, said, shipping_cost, tax_percent, price, discounted_price, ios.name, item_order.created_ts
+                                from item_order, item_order_status as ios where cuid=618 and item_order.osid = ios.osid;
+                                
+
+#Get order detail
+select io.oid, io.cuid, io.said, io.shipping_cost, io.tax_percent, io.price, io.discounted_price, ios.name as status, io.created_ts,
+                                sa.shipping_first_name, sa.shipping_last_name, sa.shipping_line1, sa.shipping_line2, sa.shipping_city, sa.shipping_zip_code, state.state, state.stid,
+                                sa.shipping_mobile from item_order as io, item_order_status as ios, item_order_shipping_address as sa, state where io.oid=421 and sa.oid = io.oid 
+                                and io.osid = ios.osid and sa.shipping_stid = state.stid;
+                                
+#Cancel order
+update item_order set osid = (select osid from item_order_status where name='Cancel Request') where oid=432;
+
+#Get promocode
+select * from promo_code;
+select pcid, code, quantity, discount, order_amount, now() between valid_from and valid_to as isactive from promo_code where code='JGBJ3638';
+select pcid, valid_from, valid_to, quantity, discount, order_amount from promo_code where code='JGBJ3638';
+                                
+                                
+                                
+                                
+                                

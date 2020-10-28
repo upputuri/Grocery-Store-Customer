@@ -4,6 +4,7 @@ import java.util.List;
 
 import com.dolittle.ecom.customer.bo.User;
 import com.dolittle.ecom.customer.bo.general.PaymentOption;
+import com.dolittle.ecom.customer.bo.general.PromoCode;
 import com.dolittle.ecom.customer.bo.general.State;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -13,6 +14,8 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.dao.DataAccessException;
+import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.hateoas.CollectionModel;
 import org.springframework.hateoas.Link;
 import org.springframework.hateoas.server.mvc.WebMvcLinkBuilder;
@@ -119,6 +122,60 @@ public class CustomerApplication implements CommandLineRunner{
 		Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getPaymentOptions(null)).withSelfRel();
 		CollectionModel<PaymentOption> result = CollectionModel.of(paymentOptions, selfLink);
 		return result;
+	}
+
+	@GetMapping(value = "/application/promocodes", produces = "application/hal+json")
+	public PromoCode getPromoCodeDetail(@RequestParam String code)
+	{
+		log.info("Processing request to check validity of promocode: "+code);
+		PromoCode promoCode = null;
+		try{
+			String get_promocode_sql = "select pc.pcid, pc.code, pc.quantity, pc.discount, pcdt.title, pc.order_amount, now() between pc.valid_from and pc.valid_to as isactive "+
+			" from promo_code as pc, promo_code_status as pcs, promo_code_discount_type as pcdt where pc.code=? and pc.pcdtid=pcdt.pcdtid and pc.pcsid = pcs.pcsid "+
+			"and pcs.name='Active'";
+			promoCode = jdbcTemplate.queryForObject(get_promocode_sql, new Object[]{code}, (rs, rowNum) -> {
+				PromoCode pc = new PromoCode();
+				int qty = rs.getInt("quantity");
+				int isActive = rs.getInt("isactive");
+				pc.setCodeValue(rs.getString("code"));
+				pc.setId(String.valueOf(rs.getString("pcid")));
+				pc.setDiscount(rs.getBigDecimal("discount"));
+				String discountType = rs.getString("title");
+				pc.setDiscountType(discountType.equals("INR")?"currency":"percentage");
+				pc.setOrderAmount(rs.getBigDecimal("order_amount"));
+				pc.setValid(qty>0 && isActive == 1);
+				if (isActive == 0) {
+					pc.setReason("expired");
+				}
+				else if (qty <= 0) {
+					pc.setReason("consumed");
+				}
+				else {
+					pc.setReason("active");
+				}
+				return pc;
+			});
+			
+		}
+		catch(EmptyResultDataAccessException e)
+		{
+			log.error("Invalid promocode: "+code);
+			promoCode = new PromoCode();
+			promoCode.setCodeValue(code);
+			promoCode.setValid(false);
+			promoCode.setReason("invalid");
+			Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getPromoCodeDetail(null)).withSelfRel();
+			promoCode.add(selfLink);
+			return promoCode;
+		}
+		catch(DataAccessException e)
+        {
+			log.error("An SQL exception occurred", e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "An internal error occurred!, pls retry after some time or pls call support");
+		}
+		Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getPromoCodeDetail(null)).withSelfRel();
+		promoCode.add(selfLink);
+		return promoCode;
 	}
 	
 }
