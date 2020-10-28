@@ -32,4 +32,9 @@ public @Data class InventorySetVariation extends RepresentationModel<InventorySe
         this.price = price.setScale(2, RoundingMode.HALF_EVEN);
         this.mrp = mrp.setScale(2, RoundingMode.HALF_EVEN);
     }
+
+    public void setPriceAfterDiscount(BigDecimal value)
+    {
+        this.priceAfterDiscount = value.setScale(2, RoundingMode.HALF_EVEN);
+    }
 }

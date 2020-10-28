@@ -28,6 +28,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.BatchPreparedStatementSetter;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.simple.SimpleJdbcInsert;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -66,19 +67,16 @@ public class OrderService {
             orders = jdbcTemplateObject.query(get_orders_sql, new Object[]{cuid}, (rs, rowNum) -> {
                 OrderSummary os = new OrderSummary();
                 BigDecimal taxRate = rs.getBigDecimal("tax_percent");
-                BigDecimal totalChargesValue = rs.getBigDecimal("shipping_cost").setScale(2, RoundingMode.HALF_EVEN);
-                BigDecimal totalPriceAfterDiscounts = rs.getBigDecimal("discounted_price").setScale(2, RoundingMode.HALF_EVEN);
+                BigDecimal totalChargesValue = rs.getBigDecimal("shipping_cost");
+                BigDecimal totalPriceAfterDiscounts = rs.getBigDecimal("discounted_price");
                 BigDecimal totalPriceAfterCharges = totalPriceAfterDiscounts.add(totalChargesValue);
-                totalPriceAfterCharges = totalPriceAfterCharges.setScale(2, RoundingMode.HALF_EVEN);
                 BigDecimal totalTaxValue = totalPriceAfterCharges.multiply(taxRate.divide(new BigDecimal(100)));
-                totalTaxValue = totalTaxValue.setScale(2, RoundingMode.HALF_EVEN);
                 BigDecimal totalPriceAfterTaxes = totalPriceAfterCharges.add(totalTaxValue);
-                totalPriceAfterTaxes = totalPriceAfterTaxes.setScale(2, RoundingMode.HALF_EVEN);
                 os.setOrderId(String.valueOf(rs.getInt("oid")));
                 os.setCustomerId(String.valueOf(rs.getInt("cuid")));
                 os.setShippingAddressId(String.valueOf(rs.getInt("said")));
-                os.setOrderTotal(rs.getBigDecimal("price").setScale(2, RoundingMode.HALF_EVEN));
-                os.setDiscountedTotal(rs.getBigDecimal("discounted_price").setScale(2, RoundingMode.HALF_EVEN));
+                os.setOrderTotal(rs.getBigDecimal("price"));
+                os.setDiscountedTotal(totalPriceAfterDiscounts);
                 os.setOrderStatus(rs.getString("name"));
                 os.setTotalChargesValue(totalChargesValue);
                 os.setTotalTaxValue(totalTaxValue);
@@ -120,10 +118,10 @@ public class OrderService {
             o.setShippingAddressId(String.valueOf(rs.getInt("said")));
             o.setDiscountedTotal(discountedTotal);
             o.setStatus(rs.getString("status"));
-            o.setTotalChargesValue(rs.getBigDecimal("shipping_cost"));
+            o.setTotalChargesValue(rs.getBigDecimal("shipping_cost").setScale(2, RoundingMode.HALF_EVEN));
             o.setTotalTaxRate(taxRate);
             o.setTotalTaxValue(totalTaxValue);
-            o.setOrderTotal(rs.getBigDecimal("price"));
+            o.setOrderTotal(rs.getBigDecimal("price").setScale(2, RoundingMode.HALF_EVEN));
             o.setFinalTotal(totalPriceAfterTaxes);
             ShippingAddress sa = new ShippingAddress(rs.getString("shipping_line1"), rs.getString("shipping_city"), rs.getString("shipping_zip_code"), rs.getString("shipping_mobile"));
             sa.setId(String.valueOf(rs.getInt("said")));
@@ -190,13 +188,19 @@ public class OrderService {
         parameters_insert_order.put("tax_type", preOrder.getTaxType());        
         parameters_insert_order.put("price", preOrder.getOrderTotal());
         parameters_insert_order.put("discounted_price", preOrder.getDiscountedTotal());
-        parameters_insert_order.put("pcid", preOrder.getAppliedPromoCodeIdList().get(0));
+        parameters_insert_order.put("pcid", preOrder.getAppliedPromoCodeIdList().size() > 0? preOrder.getAppliedPromoCodeIdList().get(0) : null);
         parameters_insert_order.put("osid", osid);
 
         Number oid = jdbcInsert_Order.executeAndReturnKey(parameters_insert_order);
 
         Order order = preOrder;
         order.setId(oid.toString());
+
+        String decrement_promocode_sql = "update promo_code set quantity = CASE WHEN quantity>0 THEN quantity-1 ELSE quantity END where pcid = ?";
+        // No need to validate promocode once again as the createPreOrder call performed from within current transaction will ensure that.
+        if (order.getAppliedPromoCodeIdList().size()>0) {
+            jdbcTemplateObject.update(decrement_promocode_sql, order.getAppliedPromoCodeIdList().get(0));
+        }
 
         // String insert_order_shipping_address = "insert into item_order_shipping_address (oid, shipping_first_name, shipping_last_name, "+
         //                                         "shipping_line1, shipping_line2, shipping_city, shipping_zip_code, shipping_mobile, "+
@@ -261,6 +265,7 @@ public class OrderService {
     }
 
     @PostMapping(value = "/orders/preorders", produces = "application/hal+json")
+    @Transactional(propagation = Propagation.SUPPORTS)
     public Order createPreOrder(@RequestBody OrderContext context , Principal principal)
     {
         log.info("Beginning to create a preorder for customer - "+context.getCustomerId());
@@ -287,11 +292,13 @@ public class OrderService {
             PromoCode promoCode = customerApp.getPromoCodeDetail(code);
             if (promoCode.isValid()){
                 promoCodeIdList.add(promoCode.getId());
-                order.addDiscount("_code_"+code, promoCode.getDiscount(), promoCode.getDiscountType());
+                if (order.getOrderTotal().subtract(promoCode.getOrderAmount()).doubleValue() > 0.0)
+                    order.addDiscount("_code_"+code, promoCode.getDiscount(), promoCode.getDiscountType());
             }
             return;
         });
         order.setAppliedPromoCodeIdList(promoCodeIdList);
+
         //order.addCharge(...)
 
         String query_tax_detail_sql = "select taxproid, name, rate, tax_type from tax_profile as t where t.default = 1";
