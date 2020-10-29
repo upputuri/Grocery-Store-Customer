@@ -10,7 +10,7 @@ import java.util.List;
 
 import com.dolittle.ecom.customer.bo.Cart;
 import com.dolittle.ecom.customer.bo.CartItem;
-import com.dolittle.ecom.customer.util.CustomerAppUtil;
+import com.dolittle.ecom.app.util.CustomerRunnerUtil;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
@@ -99,7 +99,7 @@ public class CustomerCartService
     public Cart getCart(@PathVariable(value="id", required = true) String customerId, Principal principal)
     {
         log.info("Processing request to get cart");
-        CustomerAppUtil.assertAuthCustomerId(jdbcTemplateObject, principal, customerId);
+        CustomerRunnerUtil.assertAuthCustomerId(jdbcTemplateObject, principal, customerId);
         Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getCart(customerId, principal)).withSelfRel();
         Cart cart = new Cart();
         cart.setCartItems(new ArrayList<CartItem>(getCartItems(customerId, principal).getContent()));
@@ -115,7 +115,7 @@ public class CustomerCartService
         // If user doesn't have a cart yet, create a cart?
         // Receives - productId, is_variation, qty
         log.info("Processing request to add/update item to cart for customer Id: "+customerId);
-        CustomerAppUtil.assertAuthCustomerId(jdbcTemplateObject, principal, customerId);
+        CustomerRunnerUtil.assertAuthCustomerId(jdbcTemplateObject, principal, customerId);
         try{
             String check_cartitem_exists_sql = "select cartiid from cart_item where cartid = (select cartid from cart where cuid = ?) and iid= ? and isvid = ? "+
                                                 "and cartisid=(select cartisid from cart_item_status where name='Active') limit 0,1";

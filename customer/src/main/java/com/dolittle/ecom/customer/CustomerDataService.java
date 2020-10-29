@@ -11,7 +11,7 @@ import java.util.Map;
 import com.dolittle.ecom.customer.bo.Customer;
 import com.dolittle.ecom.customer.bo.CustomerQuery;
 import com.dolittle.ecom.customer.bo.ShippingAddress;
-import com.dolittle.ecom.customer.util.CustomerAppUtil;
+import com.dolittle.ecom.app.util.CustomerRunnerUtil;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
@@ -61,7 +61,7 @@ public class CustomerDataService {
         catch(EmptyResultDataAccessException e)
         {
            //Good. We will now register this new user
-           String passwordHash = CustomerAppUtil.generateBcryptPasswordHash(customer.getPassword());
+           String passwordHash = CustomerRunnerUtil.generateBcryptPasswordHash(customer.getPassword());
            int ustatusid = jdbcTemplateObject.queryForObject("select ustatusid from auser_status where name = 'Active'", Integer.TYPE);
            SimpleJdbcInsert userJdbcInsert = new SimpleJdbcInsert(jdbcTemplateObject)
                                                    .usingColumns("name", "email", "password", "type_auser", "ustatusid")
@@ -171,7 +171,7 @@ public class CustomerDataService {
     public void editProfile(@PathVariable String customerId, @RequestBody Customer profile, Principal principal)
     {
         log.info("Processing edit profile request for customer Id: "+customerId);
-        CustomerAppUtil.assertAuthCustomerId(jdbcTemplateObject, principal, customerId);
+        CustomerRunnerUtil.assertAuthCustomerId(jdbcTemplateObject, principal, customerId);
 
         DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");  
         String strDate = profile.getDob() != null ? dateFormat.format(profile.getDob()) : null;  
@@ -192,7 +192,7 @@ public class CustomerDataService {
     public CollectionModel<ShippingAddress> getCustomerAddresses(@PathVariable(value = "id") String customerId, Principal principal)
     {
         log.info("Processing request Get Customer Addressses for customer Id {}"+customerId);
-        CustomerAppUtil.assertAuthCustomerId(jdbcTemplateObject, principal, customerId);
+        CustomerRunnerUtil.assertAuthCustomerId(jdbcTemplateObject, principal, customerId);
         try{
             List<ShippingAddress> addressList = new ArrayList<ShippingAddress>();
             String get_customer_addresses = "select sa.said, sa.first_name, sa.last_name, sa.line1, sa.line2, sa.zip_code, sa.mobile, sa.city, sa.stid, state.state "+
@@ -233,7 +233,7 @@ public class CustomerDataService {
             //                 "values (?, ?, ?, ?, ?, ?, ?, (select sasid from customer_shipping_address_status "+
             //                 "where name like 'active'))";   
             log.info("Processing request to add new address to customer Id {}", customerId);
-            CustomerAppUtil.assertAuthCustomerId(jdbcTemplateObject, principal, customerId);
+            CustomerRunnerUtil.assertAuthCustomerId(jdbcTemplateObject, principal, customerId);
             String sql = "select sasid from customer_shipping_address_status where name = 'Active'";
             int sasid = jdbcTemplateObject.queryForObject(sql, Integer.TYPE);
 
@@ -274,7 +274,7 @@ public class CustomerDataService {
     {
         try{  
             log.info("Processing request to update address of customer Id {} with addressId {}", customerId, address.getId());
-            CustomerAppUtil.assertAuthCustomerId(jdbcTemplateObject, principal, customerId);
+            CustomerRunnerUtil.assertAuthCustomerId(jdbcTemplateObject, principal, customerId);
             String address_update_sql = "update customer_shipping_address set first_name=?, last_name=?, line1=?, line2=?, city=?, zip_code=?, mobile=?, stid=? "+
                                         "where said=?";
                             
@@ -299,7 +299,7 @@ public class CustomerDataService {
     public void createQuery(@RequestBody CustomerQuery query, @PathVariable String customerId, Principal principal)
     {
         log.info("Processing create query request for customer Id: "+customerId);
-        Customer c = CustomerAppUtil.assertAuthCustomerId(jdbcTemplateObject, principal, customerId);
+        Customer c = CustomerRunnerUtil.assertAuthCustomerId(jdbcTemplateObject, principal, customerId);
         try{
 
             SimpleJdbcInsert queryJdbcInsert = new SimpleJdbcInsert(jdbcTemplateObject)

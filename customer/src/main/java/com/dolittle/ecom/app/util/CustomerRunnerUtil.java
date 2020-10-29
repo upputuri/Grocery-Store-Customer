@@ -1,4 +1,4 @@
-package com.dolittle.ecom.customer.util;
+package com.dolittle.ecom.app.util;
 
 import java.io.UnsupportedEncodingException;
 import java.math.BigInteger;
@@ -17,7 +17,7 @@ import org.springframework.web.server.ResponseStatusException;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
-public class CustomerAppUtil {
+public class CustomerRunnerUtil {
 
     public static String generateSHA256PasswordHash(String password)
     {
@@ -53,8 +53,8 @@ public class CustomerAppUtil {
     public static Customer assertAuthCustomerId(JdbcTemplate jdbcTemplateObject, Principal principal, String customerId)
     {
         Customer customer = null;
-        String get_customer_profile_query = "select c.cuid, c.uid, c.email, c.fname, c.lname from customer c "+
-                                    "where c.email = ? and c.cuid = ? and c.custatusid = (select custatusid from customer_status where name='Active')";
+        String get_customer_profile_query = "select c.cuid, c.uid, c.email, c.fname, c.lname from customer c, auser au "+
+                                    "where au.uid = c.uid and au.user_id = ? and c.cuid = ? and c.custatusid = (select custatusid from customer_status where name='Active')";
         try{
             customer = jdbcTemplateObject.queryForObject(get_customer_profile_query, new Object[]{principal.getName(), customerId}, (rs, rownum) -> {
                 Customer c = new Customer();

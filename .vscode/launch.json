@@ -28,6 +28,21 @@
                 "dbuser": "grocadmin",
                 "dbpassword": "srikanth"
             }
+        },
+        {
+            "type": "java",
+            "name": "Spring Boot-CustomerRunner<customer>",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "console": "internalConsole",
+            "mainClass": "com.dolittle.ecom.app.CustomerRunner",
+            "projectName": "customer",
+            "args": [],
+            "env": {
+                "jdbcurl": "jdbc:mysql://localhost:3306/grocdb",
+                "dbuser": "grocadmin",
+                "dbpassword": "srikanth"
+            }
         }
     ]
 }

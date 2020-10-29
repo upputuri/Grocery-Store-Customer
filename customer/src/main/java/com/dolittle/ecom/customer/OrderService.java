@@ -9,6 +9,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.dolittle.ecom.app.CustomerRunner;
 import com.dolittle.ecom.customer.bo.CartItem;
 import com.dolittle.ecom.customer.bo.Customer;
 import com.dolittle.ecom.customer.bo.Order;
@@ -52,7 +53,7 @@ public class OrderService {
     CustomerCartService cartService;
 
     @Autowired
-    CustomerApplication customerApp;
+    CustomerRunner customerApp;
 
     @GetMapping(value = "/orders", produces = "application/hal+json")
     public CollectionModel<OrderSummary> getOrders(@RequestParam String cuid, Principal principal)
