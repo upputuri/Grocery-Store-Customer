@@ -45,15 +45,15 @@ public class CustomerDataService {
     @PostMapping(value="/customers", produces = "application/hal+json")
     public Customer registerUser(@RequestBody Customer customer)
     {
-        if (customer.getEmail() == null || customer.getEmail().trim().isEmpty()
+        if (customer.getMobile() == null || customer.getMobile().trim().isEmpty()
                 || customer.getPassword() == null || customer.getPassword().trim().isEmpty())
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Missing mandatory inputs in register request, check for email and password");
         //Check if customer exists
         try{
-            String fetch_customer_sql = "select c.cuid from customer c where c.email=?";
-            customer = jdbcTemplateObject.queryForObject(fetch_customer_sql, new Object[]{customer.getEmail()}, (rs, rowNum) -> {
+            String fetch_customer_sql = "select au.uid from auser au where au.user_id=? or (length(au.email) > 0 and au.email=?)";
+            customer = jdbcTemplateObject.queryForObject(fetch_customer_sql, new Object[]{customer.getMobile(), customer.getEmail()}, (rs, rowNum) -> {
                 // If control comes here, that means there's a customer record already in db with same email.
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "An account with the email already exists");
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "An account with the email/phone already exists");
             });
             log.error("We are not supposed to reach here. Investigate!");
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "An internal error occurred!, pls retry after some time or pls call support");
@@ -64,23 +64,28 @@ public class CustomerDataService {
            String passwordHash = CustomerRunnerUtil.generateBcryptPasswordHash(customer.getPassword());
            int ustatusid = jdbcTemplateObject.queryForObject("select ustatusid from auser_status where name = 'Active'", Integer.TYPE);
            SimpleJdbcInsert userJdbcInsert = new SimpleJdbcInsert(jdbcTemplateObject)
-                                                   .usingColumns("name", "email", "password", "type_auser", "ustatusid")
+                                                   .usingColumns("name", "user_id", "email", "password", "type_auser", "ustatusid")
                                                    .withTableName("auser")
                                                    .usingGeneratedKeyColumns("uid");
             Map<String, Object> userParams = new HashMap<String, Object>(1);
             userParams.put("name", customer.getFName()+ " "+customer.getLName());
             userParams.put("email", customer.getEmail());
             userParams.put("password", passwordHash);
+            userParams.put("user_id", customer.getMobile());
             userParams.put("type_auser", 3);
             userParams.put("ustatusid", ustatusid);        
-
             Number uid = userJdbcInsert.executeAndReturnKey(userParams);
 
+            //Insert role records
+            String get_customer_role_id_sql = "select rid from arole where name='Customer'";
+            int rid = jdbcTemplateObject.queryForObject(get_customer_role_id_sql, Integer.TYPE);
+            String add_authority_sql = "insert into auser_role (uid, rid) value (?,?)";
+            jdbcTemplateObject.update(add_authority_sql, uid.intValue(), rid);
 
             //Now insert a customer record
             int custatusid = jdbcTemplateObject.queryForObject("select custatusid from customer_status where name = 'Active'", Integer.TYPE);
             SimpleJdbcInsert customerJdbcInsert = new SimpleJdbcInsert(jdbcTemplateObject)
-                                                    .usingColumns("uid", "fname", "lname", "email", "password", "custatusid")
+                                                    .usingColumns("uid", "fname", "lname", "email", "password", "mobile", "alt_mobile", "custatusid")
                                                     .withTableName("customer")
                                                     .usingGeneratedKeyColumns("cuid");
             Map<String, Object> customerParams = new HashMap<String, Object>(1);
@@ -88,8 +93,10 @@ public class CustomerDataService {
             customerParams.put("fname", customer.getFName());
             customerParams.put("lname", customer.getLName());
             customerParams.put("email", customer.getEmail());
+            customerParams.put("mobile", customer.getMobile()); 
+            customerParams.put("alt_mobile", customer.getAltMobile());       
             customerParams.put("password", passwordHash);
-            customerParams.put("custatusid", custatusid);        
+            customerParams.put("custatusid", custatusid);
 
             Number cuid = customerJdbcInsert.executeAndReturnKey(customerParams);
             
@@ -120,28 +127,30 @@ public class CustomerDataService {
     public Customer getCustomerProfile(@PathVariable String customerId, Principal principal)
     {   
         log.info("Getting customer profile for customer id: "+customerId);
-        String get_customer_profile_query = "select c.cuid, c.fname, c.lname, c.email, c.alt_email, c.dob, c.mobile, c.alt_mobile from customer c "+
-                                            "where c.email = ? and custatusid = (select custatusid from customer_status where name = 'Active')";
+        Customer customer = CustomerRunnerUtil.assertAuthCustomerId(jdbcTemplateObject, principal, customerId);
 
-        Customer customer = jdbcTemplateObject.queryForObject(get_customer_profile_query, new Object[]{principal.getName()}, (rs, rownum) -> {
-            Customer c = new Customer();
-            c.setId(String.valueOf(rs.getInt("cuid")));
-            c.setFName(rs.getString("fname"));
-            c.setLName(rs.getString("lname"));
-            c.setEmail(rs.getString("email"));
-            c.setDob(rs.getDate("dob"));
-            c.setAltEmail(rs.getString("alt_email"));
-            c.setMobile(rs.getString("mobile"));
-            c.setAltMobile(rs.getString("alt_mobile"));
-            return c;
-        });
+        // String get_customer_profile_query = "select c.cuid, c.fname, c.lname, c.email, c.alt_email, c.dob, c.mobile, c.alt_mobile from customer c "+
+        //                                     "where c.cuid = ? and custatusid = (select custatusid from customer_status where name = 'Active')";
 
-        if (!customerId.equals(customer.getId()))
-        {
-            log.error("Requested customer Id does not match with the authenticated user");
-            log.debug("Requested customer Id: {}, authorized user email {}, authorized user customer Id {}", customerId, principal.getName(), customer.getId());
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "You do not have permission to view details of the provided customer Id");
-        }
+        // Customer customer = jdbcTemplateObject.queryForObject(get_customer_profile_query, new Object[]{customerId}, (rs, rownum) -> {
+        //     Customer c = new Customer();
+        //     c.setId(String.valueOf(rs.getInt("cuid")));
+        //     c.setFName(rs.getString("fname"));
+        //     c.setLName(rs.getString("lname"));
+        //     c.setEmail(rs.getString("email"));
+        //     c.setDob(rs.getDate("dob"));
+        //     c.setAltEmail(rs.getString("alt_email"));
+        //     c.setMobile(rs.getString("mobile"));
+        //     c.setAltMobile(rs.getString("alt_mobile"));
+        //     return c;
+        // });
+
+        // if (!customerId.equals(customer.getId()))
+        // {
+        //     log.error("Requested customer Id does not match with the authenticated user");
+        //     log.debug("Requested customer Id: {}, authorized user email {}, authorized user customer Id {}", customerId, principal.getName(), customer.getId());
+        //     throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "You do not have permission to view details of the provided customer Id");
+        // }
 
         List<ShippingAddress> addressList = new ArrayList<ShippingAddress>();
         String get_customer_addresses = "select sa.said, sa.first_name, sa.last_name, sa.line1, sa.line2, sa.zip_code, sa.mobile, sa.city, sa.stid, state.state "+

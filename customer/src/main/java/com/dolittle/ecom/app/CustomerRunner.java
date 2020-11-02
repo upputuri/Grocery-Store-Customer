@@ -1,12 +1,16 @@
 package com.dolittle.ecom.app;
 
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
+import com.dolittle.ecom.app.security.bo.OTPRequest;
 import com.dolittle.ecom.customer.bo.general.PaymentOption;
 import com.dolittle.ecom.customer.bo.general.PromoCode;
 import com.dolittle.ecom.customer.bo.general.State;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -21,7 +25,12 @@ import org.springframework.hateoas.Link;
 import org.springframework.hateoas.server.mvc.WebMvcLinkBuilder;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.mail.SimpleMailMessage;
+import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
@@ -40,6 +49,12 @@ public class CustomerRunner implements CommandLineRunner{
 
 	@Autowired
 	JdbcTemplate jdbcTemplate;	
+	
+	@Autowired
+	private JavaMailSender mailSender;
+	
+	@Value("${spring.mail.username}")
+	private String emailFromAddress;
 	
 	public static void main(final String[] args) {
 		SpringApplication.run(CustomerRunner.class, args);
@@ -178,4 +193,32 @@ public class CustomerRunner implements CommandLineRunner{
 		return promoCode;
 	}
 	
+	@PostMapping(value = "/application/otptokens")
+    public void sendOTP(@RequestBody OTPRequest otpRequest, Authentication auth)
+    {
+        log.info("Processing send OTP request");
+        
+        if (otpRequest.getType().equals("email"))
+        {
+            //Send email OTP to customer
+            SimpleMailMessage message = new SimpleMailMessage(); 
+            message.setFrom(emailFromAddress);
+
+			Pattern EMAIL_ADDRESS_REGEX = Pattern.compile("^[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,6}$", Pattern.CASE_INSENSITIVE);
+			//Pattern PHONE_NUMBER_REGEX = Pattern.compile("^\\d{10}$");
+            String toEmailId = otpRequest.getTarget();
+			Matcher emailMatcher = EMAIL_ADDRESS_REGEX.matcher(toEmailId);
+            if (toEmailId != null && toEmailId.length() > 0 && emailMatcher.find()){
+                message.setTo(toEmailId); 
+            }
+            else {
+				log.error("Bad request. Invalid email Id supplied: "+otpRequest.getTarget());
+				throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid email Id supplied");
+            }
+            message.setSubject("OTP Confirmation"); 
+            message.setText(otpRequest.getMessage().replace("{}", otpRequest.getOtp()));
+			mailSender.send(message);
+			log.info("OTP sent to requested target");
+        }
+    }
 }

@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 
 import com.dolittle.ecom.app.CustomerRunner;
+import com.dolittle.ecom.app.util.CustomerRunnerUtil;
 import com.dolittle.ecom.customer.bo.CartItem;
 import com.dolittle.ecom.customer.bo.Customer;
 import com.dolittle.ecom.customer.bo.Order;
@@ -59,7 +60,7 @@ public class OrderService {
     public CollectionModel<OrderSummary> getOrders(@RequestParam String cuid, Principal principal)
     {
         log.info("Processing get orders for customer id: "+cuid);
-        assertAuthCustomerId(principal, cuid);
+        CustomerRunnerUtil.assertAuthCustomerId(jdbcTemplateObject, principal, cuid);
 
         List<OrderSummary> orders = new ArrayList<OrderSummary>();
         String get_orders_sql = "select oid, cuid, said, shipping_cost, tax_percent, price, discounted_price, ios.name, item_order.created_ts "+
@@ -136,7 +137,7 @@ public class OrderService {
             o.add(selfLink);
             return o;
         });
-        assertAuthCustomerId(principal, order.getCustomerId());
+        CustomerRunnerUtil.assertAuthCustomerId(jdbcTemplateObject, principal, order.getCustomerId());
 
         String get_order_items = "select ioi.oiid, ioi.oid, ioi.iid, ioi.isvid, ioi.quantity, ioi.discounted_price, ii.name as item_name, insv.name as variant_name "+
                                 "from item_order_item ioi, inventory_set_variations as insv, item_item as ii "+
@@ -171,7 +172,7 @@ public class OrderService {
         // 6. Change status of cart items in db to 'executed'
 
         log.info("Beginning to create an order for customer - "+orderContext.getCustomerId());
-        assertAuthCustomerId(principal, orderContext.getCustomerId());
+        CustomerRunnerUtil.assertAuthCustomerId(jdbcTemplateObject, principal, orderContext.getCustomerId());
         Order preOrder = this.createPreOrder(orderContext, principal);
 
         int osid = jdbcTemplateObject.queryForObject("select osid from item_order_status where name='Initial'", Integer.TYPE);
@@ -270,7 +271,7 @@ public class OrderService {
     public Order createPreOrder(@RequestBody OrderContext context , Principal principal)
     {
         log.info("Beginning to create a preorder for customer - "+context.getCustomerId());
-        assertAuthCustomerId(principal, context.getCustomerId());
+        CustomerRunnerUtil.assertAuthCustomerId(jdbcTemplateObject, principal, context.getCustomerId());
         Order order = new Order();
         order.setCustomerId(context.getCustomerId());
         CollectionModel<CartItem> cartItemsModel = cartService.getCartItems(context.getCustomerId(), principal);
@@ -347,7 +348,7 @@ public class OrderService {
         try{
             log.info("Processing request to cancel order Id: "+orderId);
             Number customerId = jdbcTemplateObject.queryForObject("select cuid from item_order where oid=?", new Object[]{orderId}, Integer.TYPE);
-            assertAuthCustomerId(principal, customerId.toString());
+            CustomerRunnerUtil.assertAuthCustomerId(jdbcTemplateObject, principal, customerId.toString());
             String currentStatus = jdbcTemplateObject.queryForObject("select ios.name from item_order io, item_order_status ios where oid=? and io.osid = ios.osid",
                                                                  new Object[]{orderId}, String.class);
             if (currentStatus.trim().equals("Initial") || currentStatus.equals("Executing")){
@@ -364,23 +365,23 @@ public class OrderService {
         }
     }
 
-    private Customer assertAuthCustomerId(Principal principal, String customerId)
-    {
-        Customer customer = null;
-        String get_customer_profile_query = "select c.cuid from customer c "+
-                                    "where c.email = ? and c.cuid = ? and c.custatusid = (select custatusid from customer_status where name='Active')";
-        try{
-            customer = jdbcTemplateObject.queryForObject(get_customer_profile_query, new Object[]{principal.getName(), customerId}, (rs, rownum) -> {
-                Customer c = new Customer();
-                c.setId(String.valueOf(rs.getInt("cuid")));
-                return c;
-            });
-        }
-        catch(EmptyResultDataAccessException e)
-        {
-            log.error("Requested customer Id does not match with authenticated user or the customer is inactive");
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "You do not have permission to view details of the provided customer Id");
-        }
-        return customer;
-    }
+    // private Customer assertAuthCustomerId(Principal principal, String customerId)
+    // {
+    //     Customer customer = null;
+    //     String get_customer_profile_query = "select c.cuid from customer c "+
+    //                                 "where c.email = ? and c.cuid = ? and c.custatusid = (select custatusid from customer_status where name='Active')";
+    //     try{
+    //         customer = jdbcTemplateObject.queryForObject(get_customer_profile_query, new Object[]{principal.getName(), customerId}, (rs, rownum) -> {
+    //             Customer c = new Customer();
+    //             c.setId(String.valueOf(rs.getInt("cuid")));
+    //             return c;
+    //         });
+    //     }
+    //     catch(EmptyResultDataAccessException e)
+    //     {
+    //         log.error("Requested customer Id does not match with authenticated user or the customer is inactive");
+    //         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "You do not have permission to view details of the provided customer Id");
+    //     }
+    //     return customer;
+    // }
 }
