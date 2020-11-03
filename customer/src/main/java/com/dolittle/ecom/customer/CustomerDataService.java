@@ -8,10 +8,11 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.dolittle.ecom.app.AppUser;
+import com.dolittle.ecom.app.util.CustomerRunnerUtil;
 import com.dolittle.ecom.customer.bo.Customer;
 import com.dolittle.ecom.customer.bo.CustomerQuery;
 import com.dolittle.ecom.customer.bo.ShippingAddress;
-import com.dolittle.ecom.app.util.CustomerRunnerUtil;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
@@ -22,6 +23,8 @@ import org.springframework.hateoas.server.mvc.WebMvcLinkBuilder;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.simple.SimpleJdbcInsert;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -37,6 +40,9 @@ import lombok.extern.slf4j.Slf4j;
 @RestController
 @Slf4j
 public class CustomerDataService {
+
+    @Autowired
+    PasswordEncoder passwordEncoder;
 
     @Autowired
     JdbcTemplate jdbcTemplateObject;
@@ -61,7 +67,8 @@ public class CustomerDataService {
         catch(EmptyResultDataAccessException e)
         {
            //Good. We will now register this new user
-           String passwordHash = CustomerRunnerUtil.generateBcryptPasswordHash(customer.getPassword());
+        //    String passwordHash = CustomerRunnerUtil.generateBcryptPasswordHash(customer.getPassword());
+            String passwordHash = passwordEncoder.encode(customer.getPassword());
            int ustatusid = jdbcTemplateObject.queryForObject("select ustatusid from auser_status where name = 'Active'", Integer.TYPE);
            SimpleJdbcInsert userJdbcInsert = new SimpleJdbcInsert(jdbcTemplateObject)
                                                    .usingColumns("name", "user_id", "email", "password", "type_auser", "ustatusid")
@@ -177,17 +184,43 @@ public class CustomerDataService {
     
     @Transactional
     @PutMapping(value = "/customers/{customerId}", produces = "application/hal+json" )
-    public void editProfile(@PathVariable String customerId, @RequestBody Customer profile, Principal principal)
+    public void editProfile(@PathVariable String customerId, @RequestBody Customer profile, Authentication auth)
     {
         log.info("Processing edit profile request for customer Id: "+customerId);
-        CustomerRunnerUtil.assertAuthCustomerId(jdbcTemplateObject, principal, customerId);
+        Customer customer = CustomerRunnerUtil.fetchAuthCustomer(jdbcTemplateObject, auth);
 
+        if (!customer.getId().equals(customerId)){
+            log.error("Requested customer Id does not match with authenticated user or the customer is inactive");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "You do not have permission to view details of the provided customer Id");
+        }
+
+        AppUser appUser = (AppUser)auth.getPrincipal();
+        if (profile.getEmail() != null && !profile.getEmail().equals(appUser.getEmail()))
+        {
+            String check_unique_username_sql = "select count(*) from auser where email=?";
+            int count = jdbcTemplateObject.queryForObject(check_unique_username_sql, new Object[]{profile.getEmail()}, Integer.TYPE);
+            if (count > 0) {
+                log.error("Invalid input. An account with the given email already exists.");
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Email change not accepted. This email is registered with another account");
+            }
+        }
+        if (profile.getMobile() != null && !profile.getMobile().equals(appUser.getMobile()))
+        {
+            String check_unique_username_sql = "select count(*) from auser where user_id=?";
+            int count = jdbcTemplateObject.queryForObject(check_unique_username_sql, new Object[]{profile.getMobile()}, Integer.TYPE);
+            if (count > 0) {
+                log.error("Invalid input. An account with the given mobile# already exists.");
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Mobile No. change not accepted. This mobile no.is registered with another account");
+            }
+        }
         DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");  
         String strDate = profile.getDob() != null ? dateFormat.format(profile.getDob()) : null;  
-
+        String passwordHash = profile.getPassword() != null ? passwordEncoder.encode(profile.getPassword()) : null;
         try{
-            jdbcTemplateObject.update("update customer set fname=?, lname=?, alt_email=?, dob=?, mobile=?, alt_mobile=? where cuid=?", 
-                            profile.getFName(), profile.getLName(), profile.getAltEmail(), strDate, profile.getMobile(), profile.getAltMobile(), customerId);
+            jdbcTemplateObject.update("update customer set fname=?, lname=?, email=?, alt_email=?, dob=?, mobile=?, alt_mobile=?, password=? where cuid=?", 
+                            profile.getFName(), profile.getLName(), profile.getEmail(), profile.getAltEmail(), strDate, profile.getMobile(), profile.getAltMobile(), passwordHash, customerId);
+            jdbcTemplateObject.update("update auser set name=?, email=?, user_id=?, password=? where uid=?", 
+                            profile.getFName()+" "+profile.getLName(), profile.getEmail(), profile.getMobile(), passwordHash, customer.getUid());
         }
         catch(DataAccessException e)
         {

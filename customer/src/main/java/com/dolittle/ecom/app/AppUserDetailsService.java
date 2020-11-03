@@ -43,6 +43,7 @@ public class AppUserDetailsService implements UserDetailsService {
                             .authorities(ga).build();
             AppUser au = new AppUser(rs.getString("uid"), rs.getString("name"));
             au.setEmail(rs.getString("email"));
+            au.setMobile(rs.getString("user_id"));
             au.setUser(user);
             return au;
         });

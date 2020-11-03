@@ -11,6 +11,7 @@ public @Data class AppUser implements UserDetails {
     private String uid;
     private String name;
     private String email;
+    private String mobile;
     private UserDetails user;
 
     public AppUser(String uid, String name)

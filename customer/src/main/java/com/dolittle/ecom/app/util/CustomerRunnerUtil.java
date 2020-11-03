@@ -14,6 +14,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.web.server.ResponseStatusException;
 
 import lombok.extern.slf4j.Slf4j;
@@ -103,14 +104,14 @@ public class CustomerRunnerUtil {
         }
         catch(EmptyResultDataAccessException e)
         {
-            log.error("Requested customer Id does not match with authenticated user or the customer is inactive");
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "You do not have permission to view details of the provided customer Id");
+            log.error("No customer record found for the authenticated user.");
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "No customer record found for the authenticated user");
         }
         return customer;
     }
 
     public static void main(String st[])
     {
-        System.out.println(new BCryptPasswordEncoder().encode("Password123"));
+        System.out.println(PasswordEncoderFactories.createDelegatingPasswordEncoder().encode("Password123"));
     }
 }

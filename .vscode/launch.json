@@ -2,6 +2,13 @@
     "configurations": [
         {
             "type": "java",
+            "name": "CodeLens (Launch) - CustomerRunnerUtil",
+            "request": "launch",
+            "mainClass": "com.dolittle.ecom.app.util.CustomerRunnerUtil",
+            "projectName": "customer"
+        },
+        {
+            "type": "java",
             "name": "CodeLens (Launch) - CustomerAppUtil",
             "request": "launch",
             "mainClass": "com.dolittle.ecom.customer.util.CustomerAppUtil",

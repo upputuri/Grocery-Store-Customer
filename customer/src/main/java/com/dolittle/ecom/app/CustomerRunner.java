@@ -1,9 +1,11 @@
 package com.dolittle.ecom.app;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import com.dolittle.ecom.app.bo.Subscriptions;
 import com.dolittle.ecom.app.security.bo.OTPRequest;
 import com.dolittle.ecom.customer.bo.general.PaymentOption;
 import com.dolittle.ecom.customer.bo.general.PromoCode;
@@ -22,12 +24,15 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.hateoas.CollectionModel;
 import org.springframework.hateoas.Link;
+import org.springframework.hateoas.RepresentationModel;
 import org.springframework.hateoas.server.mvc.WebMvcLinkBuilder;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.crypto.factory.PasswordEncoderFactories;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -37,6 +42,7 @@ import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
+import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 
 // @SpringBootApplication
@@ -84,6 +90,10 @@ public class CustomerRunner implements CommandLineRunner{
 		};
 	}	
 
+	@Bean
+	public PasswordEncoder getPasswordEncoder() {
+		return PasswordEncoderFactories.createDelegatingPasswordEncoder();
+	}
 	// @RequestMapping("/application/users")
 	// public List<User> getAllUsers()
 	// {
@@ -220,5 +230,80 @@ public class CustomerRunner implements CommandLineRunner{
 			mailSender.send(message);
 			log.info("OTP sent to requested target");
         }
+	}
+	
+	@Data class CoverImage extends RepresentationModel<CoverImage>{
+		String image;
+		int rank;
+	}
+
+	@GetMapping(value="/application/coverimages", produces = "application/hal+json")
+	public CollectionModel<CoverImage> getCoverImages()
+	{
+		log.info("Processing get cover images");
+
+		String cover_images_sql = "SELECT name, cover_image.rank FROM cover_image WHERE coisid = '1' and ((curdate()>= from_time and curdate() <= to_time) "+
+							"OR (from_time is null and to_time is null) OR (curdate()>=from_time and to_time is null)) order by cover_image.rank";
+		
+		List<CoverImage> images = new ArrayList<CoverImage>();
+		try{
+			images = jdbcTemplate.query(cover_images_sql, (rs, rowNum) -> {
+				CoverImage ci = new CoverImage();
+				ci.image = rs.getString("name");
+				ci.rank = rs.getInt("rank");
+				Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getCoverImages()).withSelfRel();
+				ci.add(selfLink);
+				return ci;
+			});
+		}
+		catch(DataAccessException e)
+        {
+			log.error("An SQL exception occurred", e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "An internal error occurred!, pls retry after some time or pls call support");
+		}
+		Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getCoverImages()).withSelfRel();
+
+		return CollectionModel.of(images).add(selfLink);
+	}
+
+	@GetMapping(value="/application/subscriptions", produces="application/hal+json")
+    public Subscriptions getSubscriptions(@RequestParam String email)
+    {
+		log.info("Processing get subscriptions for email: "+email);
+		Subscriptions subs = new Subscriptions();
+		try{
+			String get_subscriptions_sql = "select count(*) from newsletter_email where email=? and nlesid=1";
+			int count = jdbcTemplate.queryForObject(get_subscriptions_sql, new Object[]{email}, Integer.TYPE);
+			subs.setNewsletter(count > 0 ? true: false);
+		}
+		catch(DataAccessException e)
+        {
+			log.error("An SQL exception occurred", e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "An internal error occurred!, pls retry after some time or pls call support");
+		}
+        Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getSubscriptions(email)).withSelfRel();
+        return subs.add(selfLink);
+    }
+
+    @PostMapping(value="/application/subscriptions")
+    public void updateSubscription(@RequestBody Subscriptions subs, @RequestParam String email)
+    {
+		log.info("Processing update subscription for email: "+email);
+		try{
+			Subscriptions s = getSubscriptions(email);
+			if (!s.isNewsletter() && subs.isNewsletter()){
+				String add_subscription_sql = "INSERT INTO newsletter_email (email , nlesid) VALUES(? , '1')";
+				jdbcTemplate.update(add_subscription_sql, email);
+			}else if (s.isNewsletter() && !subs.isNewsletter())
+			{
+				String remove_subscription_sql = "DELETE FROM newsletter_email where email=?";
+				jdbcTemplate.update(remove_subscription_sql, email);
+			}
+		}
+		catch(DataAccessException e)
+        {
+			log.error("An SQL exception occurred", e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "An internal error occurred!, pls retry after some time or pls call support");
+		}
     }
 }

@@ -8,6 +8,7 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -17,6 +18,9 @@ public class WebSecurityConfig extends WebSecurityConfigurerAdapter {
 
     @Autowired
     private UserDetailsService userDetailsService;
+
+    @Autowired
+    PasswordEncoder passwordEncoder;
      
     @Autowired
     public void configAuthentication(AuthenticationManagerBuilder auth) throws Exception {
@@ -26,7 +30,7 @@ public class WebSecurityConfig extends WebSecurityConfigurerAdapter {
         //     .authoritiesByUsernameQuery("select email, 'CUSTOMER' from customer where email=?")
         // ;
 
-        auth.userDetailsService(userDetailsService).passwordEncoder(new BCryptPasswordEncoder());
+        auth.userDetailsService(userDetailsService).passwordEncoder(passwordEncoder);
         // PasswordEncoder encoder = PasswordEncoderFactories.createDelegatingPasswordEncoder();
         // auth.inMemoryAuthentication()
         //   .withUser("usrikanth@gmail.com")
