@@ -5,6 +5,8 @@ select * from customer_shipping_address_status;
 select * from customer;
 select * from state;
 select * from customer_status;
+select * from newsletter_email;
+select * from newsletter_email;
 
 
 #profile - fname, lname, email, alt_email, dob, mobile, alt_mobile, sa.first_name, sa.last_name, sa.line1, sa.line2, sa.city, sa.zip_code, sa.mobile, state.state

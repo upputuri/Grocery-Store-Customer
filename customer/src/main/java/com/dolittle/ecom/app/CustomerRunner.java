@@ -7,6 +7,8 @@ import java.util.regex.Pattern;
 
 import com.dolittle.ecom.app.bo.Subscriptions;
 import com.dolittle.ecom.app.security.bo.OTPRequest;
+import com.dolittle.ecom.app.util.CustomerRunnerUtil;
+import com.dolittle.ecom.customer.bo.LoginSession;
 import com.dolittle.ecom.customer.bo.general.PaymentOption;
 import com.dolittle.ecom.customer.bo.general.PromoCode;
 import com.dolittle.ecom.customer.bo.general.State;
@@ -33,7 +35,9 @@ import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -59,6 +63,9 @@ public class CustomerRunner implements CommandLineRunner{
 	@Autowired
 	private JavaMailSender mailSender;
 	
+	@Autowired
+	private PasswordEncoder passwordEncoder;
+
 	@Value("${spring.mail.username}")
 	private String emailFromAddress;
 	
@@ -204,7 +211,7 @@ public class CustomerRunner implements CommandLineRunner{
 	}
 	
 	@PostMapping(value = "/application/otptokens")
-    public void sendOTP(@RequestBody OTPRequest otpRequest, Authentication auth)
+    public void sendOTP(@RequestBody OTPRequest otpRequest)
     {
         log.info("Processing send OTP request");
         
@@ -305,5 +312,71 @@ public class CustomerRunner implements CommandLineRunner{
 			log.error("An SQL exception occurred", e);
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "An internal error occurred!, pls retry after some time or pls call support");
 		}
-    }
+	}
+
+	@PostMapping(value="/application/passwords")
+	@Transactional
+	public void resetPassword(@RequestBody OTPRequest otpRequest) {
+		log.info("Processing reset Password request");
+		
+		//Generate a new password
+		String newPassword = new String(CustomerRunnerUtil.generatePassword(6));
+
+		if (otpRequest.getType().equals("mobile"))
+		{
+			Pattern PHONE_NUMBER_REGEX = Pattern.compile("^\\d{10}$");
+			if (otpRequest.getTarget() != null) {
+				Matcher phoneMatcher = PHONE_NUMBER_REGEX.matcher(otpRequest.getTarget());
+				if (!phoneMatcher.find()) {
+					log.error("Invalid mobile number supplied for password reset request");
+					throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid Phone number");
+				}
+			}else{
+				log.error("Invalid mobile number supplied for password reset request");
+				throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid Phone number");
+			}
+
+			//Ensure account exists with this mobile
+			int uid = 0;
+			try{
+				uid = jdbcTemplate.queryForObject("select uid from auser where user_id=?", new Object[]{otpRequest.getTarget()}, Integer.TYPE);
+			}catch(EmptyResultDataAccessException e){
+				log.error("No account registered with this mobile number");
+				throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No account registered with this mobile number");
+			}
+
+			//Update in db
+			String passwordHash = passwordEncoder.encode(newPassword);
+			try{
+				jdbcTemplate.update("update customer set password=? where uid=?", passwordHash, uid);
+				jdbcTemplate.update("update auser set password=? where uid=?", passwordHash, uid);
+			}
+			catch(DataAccessException e)
+			{
+				log.error("An exception occurred while updating profile data", e);
+				throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "An internal error occurred!, pls retry after some time or pls call support");
+			}
+		
+            //Send email OTP to customer
+            SimpleMailMessage message = new SimpleMailMessage(); 
+            message.setFrom(emailFromAddress);
+
+			Pattern EMAIL_ADDRESS_REGEX = Pattern.compile("^[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,6}$", Pattern.CASE_INSENSITIVE);
+			//Pattern PHONE_NUMBER_REGEX = Pattern.compile("^\\d{10}$");
+            String toEmailId = "thevegitclub@gmail.com";// TODO: hack, use otpRequest.getTarget() instead;
+			Matcher emailMatcher = EMAIL_ADDRESS_REGEX.matcher(toEmailId);
+            if (toEmailId != null && toEmailId.length() > 0 && emailMatcher.find()){
+                message.setTo(toEmailId); 
+            }
+            else {
+				log.error("Bad request. Invalid email Id supplied: "+otpRequest.getTarget());
+				throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid email Id supplied");
+            }
+            message.setSubject("Vegit Password Reset"); 
+            message.setText(otpRequest.getMessage().replace("{}", newPassword));
+			mailSender.send(message);
+			log.info("New Password sent to requested target");
+        }
+
+	}
 }

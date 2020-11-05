@@ -10,5 +10,6 @@ select * from customer_query_status;
 
 select * from customer;
 
+select * from country where ctid='1';
 insert into customer_query set cqiid=1, cuid=618, name='Srikanth', email='usrik@gmail.com', subject='Hello', cqsid=1;
 insert into customer_query_message set uid=?, cqid=?, message=?, user_type=3

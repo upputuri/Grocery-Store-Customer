@@ -111,16 +111,18 @@ public class OrderService {
             Order o = new Order();
             BigDecimal discountedTotal = rs.getBigDecimal("discounted_price").setScale(2, RoundingMode.HALF_EVEN);
             BigDecimal taxRate = rs.getBigDecimal("tax_percent").setScale(2, RoundingMode.HALF_EVEN);
-            BigDecimal totalTaxValue = discountedTotal.multiply(taxRate.divide(new BigDecimal(100)));
+            BigDecimal totalChargesValue = rs.getBigDecimal("shipping_cost");
+            BigDecimal totalPriceAfterCharges = discountedTotal.add(totalChargesValue);
+            BigDecimal totalTaxValue = totalPriceAfterCharges.multiply(taxRate.divide(new BigDecimal(100)));
             totalTaxValue = totalTaxValue.setScale(2, RoundingMode.HALF_EVEN);
-            BigDecimal totalPriceAfterTaxes = discountedTotal.add(totalTaxValue);
+            BigDecimal totalPriceAfterTaxes = totalPriceAfterCharges.add(totalTaxValue);
             totalPriceAfterTaxes = totalPriceAfterTaxes.setScale(2, RoundingMode.HALF_EVEN);
             o.setId(String.valueOf(rs.getInt("oid")));
             o.setCustomerId(String.valueOf(rs.getInt("cuid")));
             o.setShippingAddressId(String.valueOf(rs.getInt("said")));
             o.setDiscountedTotal(discountedTotal);
             o.setStatus(rs.getString("status"));
-            o.setTotalChargesValue(rs.getBigDecimal("shipping_cost").setScale(2, RoundingMode.HALF_EVEN));
+            o.setTotalChargesValue(totalChargesValue.setScale(2, RoundingMode.HALF_EVEN));
             o.setTotalTaxRate(taxRate);
             o.setTotalTaxValue(totalTaxValue);
             o.setOrderTotal(rs.getBigDecimal("price").setScale(2, RoundingMode.HALF_EVEN));
@@ -178,7 +180,7 @@ public class OrderService {
         int osid = jdbcTemplateObject.queryForObject("select osid from item_order_status where name='Initial'", Integer.TYPE);
 
         SimpleJdbcInsert jdbcInsert_Order = new SimpleJdbcInsert(jdbcTemplateObject)
-                                            .usingColumns("cuid", "said", "taxproid", "tax_percent", "tax_type", "price", "discounted_price", "pcid", "osid")
+                                            .usingColumns("cuid", "said", "taxproid", "tax_percent", "shipping_cost", "tax_type", "price", "discounted_price", "pcid", "osid")
                                             .withTableName("item_order")
                                             .usingGeneratedKeyColumns("oid");
 
@@ -189,6 +191,7 @@ public class OrderService {
         parameters_insert_order.put("tax_percent", preOrder.getTotalTaxRate());
         parameters_insert_order.put("tax_type", preOrder.getTaxType());        
         parameters_insert_order.put("price", preOrder.getOrderTotal());
+        parameters_insert_order.put("shipping_cost", preOrder.getTotalChargesValue());
         parameters_insert_order.put("discounted_price", preOrder.getDiscountedTotal());
         parameters_insert_order.put("pcid", preOrder.getAppliedPromoCodeIdList().size() > 0? preOrder.getAppliedPromoCodeIdList().get(0) : null);
         parameters_insert_order.put("osid", osid);
@@ -301,7 +304,24 @@ public class OrderService {
         });
         order.setAppliedPromoCodeIdList(promoCodeIdList);
 
-        //order.addCharge(...)
+        @Data class OrderCharge{
+            private BigDecimal cost;
+            private String name;
+            private BigDecimal minOrderAmount;
+        }
+
+        String fetch_shipping_charges_sql = "select shipping_cost, min_order_amount from country where ctid='1'";
+        OrderCharge shippingCharge = jdbcTemplateObject.queryForObject(fetch_shipping_charges_sql, (rs, rowNum)->{
+            OrderCharge oc = new OrderCharge();
+            oc.cost = rs.getBigDecimal("shipping_cost");
+            oc.name = "shipping charge";
+            oc.minOrderAmount = rs.getBigDecimal("min_order_amount");
+            return oc;
+        });
+
+        if (order.getOrderTotal().compareTo(shippingCharge.minOrderAmount) < 0){
+            order.addCharge(shippingCharge.name, shippingCharge.cost, "currency");
+        }
 
         String query_tax_detail_sql = "select taxproid, name, rate, tax_type from tax_profile as t where t.default = 1";
         // Map<String, BigDecimal> tax_profile_rs_map = new HashMap<String, BigDecimal>();

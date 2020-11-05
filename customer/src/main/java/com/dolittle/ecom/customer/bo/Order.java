@@ -89,9 +89,9 @@ public @Data class Order extends RepresentationModel<Order>{
         computeTotals();
     }
 
-    public void addCharge(String name, BigDecimal chargeRate)
+    public void addCharge(String name, BigDecimal chargeRate, String type)
     {
-        charges.put(name, chargeRate);
+        charges.put(type.equals("percentage")?"_pc_"+name:"_cr_"+name, chargeRate);
         computeTotals();
     }
 
@@ -115,13 +115,19 @@ public @Data class Order extends RepresentationModel<Order>{
         this.discountedTotal = this.orderTotal.subtract(this.totalDiscountValue).setScale(2, RoundingMode.HALF_EVEN);
 
         double totalChargesRate = 0.0;
+        double totalChargesCurrency = 0.0;
         for (Map.Entry<String, BigDecimal> entry: this.charges.entrySet())
         {
-            totalChargesRate += entry.getValue().doubleValue();
+            if (entry.getKey().startsWith("_pc_")) {
+                totalChargesRate += entry.getValue().doubleValue();
+            }
+            else if (entry.getKey().startsWith("_cr_")) {
+                totalChargesCurrency += entry.getValue().doubleValue();
+            }
         }
 
-        this.totalChargesValue = this.discountedTotal.multiply(new BigDecimal(totalChargesRate/100));
-        this.totalChargesValue = this.totalChargesValue.setScale(2, RoundingMode.HALF_EVEN);
+        BigDecimal totalPercentageChargesValue = this.discountedTotal.multiply(new BigDecimal(totalChargesRate/100));
+        this.totalChargesValue = totalPercentageChargesValue.add(new BigDecimal(totalChargesCurrency)).setScale(2, RoundingMode.HALF_EVEN);
         BigDecimal grossTotalAfterCharges = this.discountedTotal.add(this.totalChargesValue).setScale(2, RoundingMode.HALF_EVEN);
 
         double totalTaxRate = 0.0;

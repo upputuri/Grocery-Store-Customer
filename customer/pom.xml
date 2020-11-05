@@ -9,8 +9,8 @@
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
 	<groupId>com.dolittle.ecom</groupId>
-	<artifactId>customer</artifactId>
-	<version>v0.2-alpha-SNAPSHOT</version>
+	<artifactId>customer-runner</artifactId>
+	<version>v0.3-alpha-SNAPSHOT</version>
 	<name>customer</name>
 	<description>Demo project for Spring Boot</description>
 

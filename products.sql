@@ -9,6 +9,7 @@ select * from item_item_status;
 select * from item_gi_category;
 select * from inventory_set_variations;
 select * from inventory_set;
+select * from inventory_set_item;
 select * from item_item;
 select * from item_attribute;
 select * from item_attribute_group;
@@ -86,15 +87,22 @@ ADD FULLTEXT(name, description, keywords);
 
 select ii.iid, ii.name, ii.keywords from item_item ii where match(name, description, keywords) against ('bag dem waLLeT');
 
-select i.iid, i.name as item_name, i.description, i.price, i.item_discount, variations.price variation_price, variations.mrp as variation_mrp, 
-variations.description as variation_desc,i.istatusid, p.imagefiles, p.title, min(variations.name) as variation_name, 
-variations.isvid as variation_id, offers.discount as offer_discount, offers.amount as offer_amount,
-match (i.name, i.description, i.keywords) against ('vita* apple*' in boolean mode) as score
-from item_item as i left join (select oi.iid, discount, amount from offer_item oi, offer where offer.offid=oi.offid and offer.offsid= (select offsid from offer_status where name='Active')) as offers 
-on (i.iid=offers.iid), item_item_status as s, item_gi_category as ic, category as c, (select insv.isvid, insv.iid, insv.name, insv.description, price, mrp from inventory_set_variations as insv, 
-inventory_set ins where ins.isvid = insv.isvid order by insv.name) as variations, (select iid, title, GROUP_CONCAT(image separator ',') as imagefiles from 
+select i.iid, i.name as item_name, i.description, i.price, i.item_discount, i.istatusid, 
+match (i.name, i.description, i.keywords) against ('vita* apple*' in boolean mode) as score,
+offers.discount as offer_discount, offers.amount as offer_amount,
+variations.price variation_price, variations.mrp as variation_mrp, variations.isvid as variation_id, count(variations.isvid) as variation_count, sum(isv_quantity) as quantity,
+p.imagefiles, p.title, min(variations.name) as variation_name
+from 
+item_item as i left join (select oi.iid, discount, amount from offer_item oi, offer where offer.offid=oi.offid and offer.offsid= (select offsid from offer_status where name='Active')) as offers on (i.iid=offers.iid) 
+inner join 
+(select sum(q.unit) as isv_quantity, q.isvid, q.iid, q.name, q.price, q.mrp from (select (case when isi.isiid is null then 0 else 1 end) as unit, isv.iid, isv.isvid, isv.name, isv.description, ins.price, ins.mrp
+		from inventory_set ins inner join inventory_set_variations isv on (ins.isvid=isv.isvid)
+        left join inventory_set_item isi on (isi.isid=ins.isid) order by isv.name) as q group by q.isvid) as variations on (variations.iid=i.iid),
+item_item_status as s, item_gi_category as ic, category as c, 
+(select iid, title, GROUP_CONCAT(image separator ',') as imagefiles from 
 item_item_photo group by iid) as p where p.iid = i.iid and s.istatusid = i.istatusid and s.name = 'Active' and ic.giid = i.iid and c.catid = ic.catid and variations.iid = i.iid  
-and c.catid = 77 and match (i.name, i.description, i.keywords) against ('vita* apple*' in boolean mode) group by i.iid order by score desc limit 0,2; 
+and c.catid = 77 and match (i.name, i.description, i.keywords) against ('vita* apple*' in boolean mode) 
+group by i.iid order by score desc limit 0,2; 
 
 select count(*) from (select i.iid, i.name as item_name, i.description, i.price, i.item_discount, variations.price variation_price, variations.mrp as variation_mrp, 
 variations.description as variation_desc,i.istatusid, p.imagefiles, p.title, s.name as status, s.description, min(variations.name) as variation_name, 
@@ -110,3 +118,8 @@ select iid, title, image from item_item_photo where iid=20 group by iid ;
 
 select * from item_item group by giid limit 0, 10;
 select  count(*) from item_item group by giid;
+
+select (case when isi.isiid is null then 0 else 1 end) as unit, isv.iid, isv.isvid, isv.name, isv.description, ins.price, ins.mrp
+		from inventory_set_variations isv 
+        inner join inventory_set ins on (ins.isvid=isv.isvid)
+        left join inventory_set_item isi on (isi.isvid=isv.isvid) order by isv.name;

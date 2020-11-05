@@ -22,8 +22,8 @@ public class AppUserDetailsService implements UserDetailsService {
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
         Pattern EMAIL_ADDRESS_REGEX = Pattern.compile("^[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,6}$", Pattern.CASE_INSENSITIVE);
-        //Pattern PHONE_NUMBER_REGEX = Pattern.compile("^\\d{10}$");
         Matcher emailMatcher = EMAIL_ADDRESS_REGEX.matcher(username);
+        //Pattern PHONE_NUMBER_REGEX = Pattern.compile("^\\d{10}$");
         //Matcher phoneMatcher = PHONE_NUMBER_REGEX.matcher(username);
 
         String user_id_match_sql = " au.user_id=?";
