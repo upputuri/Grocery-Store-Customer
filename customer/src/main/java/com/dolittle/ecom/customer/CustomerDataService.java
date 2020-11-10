@@ -24,6 +24,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.simple.SimpleJdbcInsert;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
@@ -132,10 +133,11 @@ public class CustomerDataService {
     }
 
     @GetMapping(value = "/customers/{customerId}", produces = "application/hal+json")
-    public Customer getCustomerProfile(@PathVariable String customerId, Principal principal)
+    public Customer getCustomerProfile(@PathVariable String customerId, Authentication auth)
     {   
         log.info("Getting customer profile for customer id: "+customerId);
-        Customer customer = CustomerRunnerUtil.assertAuthCustomerId(jdbcTemplateObject, principal, customerId);
+        CustomerRunnerUtil.validateAndGetAuthCustomer(auth, customerId);
+        Customer customer = (Customer)((AppUser)auth.getPrincipal()).getQualifiedUser();
 
         // String get_customer_profile_query = "select c.cuid, c.fname, c.lname, c.email, c.alt_email, c.dob, c.mobile, c.alt_mobile from customer c "+
         //                                     "where c.cuid = ? and custatusid = (select custatusid from customer_status where name = 'Active')";
@@ -188,7 +190,7 @@ public class CustomerDataService {
     public void editProfile(@PathVariable String customerId, @RequestBody Customer profile, Authentication auth)
     {
         log.info("Processing edit profile request for customer Id: "+customerId);
-        Customer customer = CustomerRunnerUtil.fetchAuthCustomer(jdbcTemplateObject, auth);
+        Customer customer = CustomerRunnerUtil.fetchAuthCustomer(auth);
 
         if (!customer.getId().equals(customerId)){
             log.error("Requested customer Id does not match with authenticated user or the customer is inactive");
@@ -196,7 +198,7 @@ public class CustomerDataService {
         }
 
         AppUser appUser = (AppUser)auth.getPrincipal();
-        if (profile.getEmail() != null && !profile.getEmail().equals(appUser.getEmail()))
+        if (profile.getEmail() != null && !profile.getEmail().equals(customer.getEmail()))
         {
             String check_unique_username_sql = "select count(*) from auser where email=?";
             int count = jdbcTemplateObject.queryForObject(check_unique_username_sql, new Object[]{profile.getEmail()}, Integer.TYPE);
@@ -205,7 +207,7 @@ public class CustomerDataService {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Email change not accepted. This email is registered with another account");
             }
         }
-        if (profile.getMobile() != null && !profile.getMobile().equals(appUser.getMobile()))
+        if (profile.getMobile() != null && !profile.getMobile().equals(customer.getMobile()))
         {
             String check_unique_username_sql = "select count(*) from auser where user_id=?";
             int count = jdbcTemplateObject.queryForObject(check_unique_username_sql, new Object[]{profile.getMobile()}, Integer.TYPE);
@@ -232,10 +234,10 @@ public class CustomerDataService {
     }
 
     @GetMapping(value = "/customers/{id}/addresses", produces = "application/hal+json")
-    public CollectionModel<ShippingAddress> getCustomerAddresses(@PathVariable(value = "id") String customerId, Principal principal)
+    public CollectionModel<ShippingAddress> getCustomerAddresses(@PathVariable(value = "id") String customerId, Authentication auth)
     {
         log.info("Processing request Get Customer Addressses for customer Id {}"+customerId);
-        CustomerRunnerUtil.assertAuthCustomerId(jdbcTemplateObject, principal, customerId);
+        CustomerRunnerUtil.validateAndGetAuthCustomer(auth, customerId);
         try{
             List<ShippingAddress> addressList = new ArrayList<ShippingAddress>();
             String get_customer_addresses = "select sa.said, sa.first_name, sa.last_name, sa.line1, sa.line2, sa.zip_code, sa.mobile, sa.city, sa.stid, state.state "+
@@ -269,14 +271,14 @@ public class CustomerDataService {
 
     @PostMapping(value = "/customers/{id}/addresses", produces = "application/hal+json")
     @Transactional(isolation = Isolation.READ_COMMITTED)
-    public ShippingAddress addNewAddress(@PathVariable(value = "id") String customerId, @RequestBody ShippingAddress address, Principal principal)
+    public ShippingAddress addNewAddress(@PathVariable(value = "id") String customerId, @RequestBody ShippingAddress address, Authentication auth)
     {
         try{
             // String queryString =  "insert into customer_shipping_address (cuid, first_name, last_name, line1, line2, city, zip_code, sasid) "+
             //                 "values (?, ?, ?, ?, ?, ?, ?, (select sasid from customer_shipping_address_status "+
             //                 "where name like 'active'))";   
             log.info("Processing request to add new address to customer Id {}", customerId);
-            CustomerRunnerUtil.assertAuthCustomerId(jdbcTemplateObject, principal, customerId);
+            CustomerRunnerUtil.validateAndGetAuthCustomer(auth, customerId);
             String sql = "select sasid from customer_shipping_address_status where name = 'Active'";
             int sasid = jdbcTemplateObject.queryForObject(sql, Integer.TYPE);
 
@@ -313,11 +315,11 @@ public class CustomerDataService {
     public void updateAddress(@PathVariable(value = "customerId") String customerId, 
                                             @PathVariable(value = "addressId") String addressId, 
                                             @RequestBody ShippingAddress address, 
-                                            Principal principal)
+                                            Authentication auth)
     {
         try{  
             log.info("Processing request to update address of customer Id {} with addressId {}", customerId, address.getId());
-            CustomerRunnerUtil.assertAuthCustomerId(jdbcTemplateObject, principal, customerId);
+            CustomerRunnerUtil.validateAndGetAuthCustomer(auth, customerId);
             String address_update_sql = "update customer_shipping_address set first_name=?, last_name=?, line1=?, line2=?, city=?, zip_code=?, mobile=?, stid=? "+
                                         "where said=?";
                             
@@ -339,10 +341,10 @@ public class CustomerDataService {
 
     @Transactional
     @PostMapping(value = "/customers/{customerId}/queries", produces = "application/hal+json")
-    public void createQuery(@RequestBody CustomerQuery query, @PathVariable String customerId, Principal principal)
+    public void createQuery(@RequestBody CustomerQuery query, @PathVariable String customerId, Authentication auth)
     {
         log.info("Processing create query request for customer Id: "+customerId);
-        Customer c = CustomerRunnerUtil.assertAuthCustomerId(jdbcTemplateObject, principal, customerId);
+        Customer c = CustomerRunnerUtil.validateAndGetAuthCustomer(auth, customerId);
         try{
 
             SimpleJdbcInsert queryJdbcInsert = new SimpleJdbcInsert(jdbcTemplateObject)

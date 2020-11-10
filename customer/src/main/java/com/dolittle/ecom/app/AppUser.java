@@ -8,18 +8,8 @@ import org.springframework.security.core.userdetails.UserDetails;
 import lombok.Data;
 
 public @Data class AppUser implements UserDetails {
-    private String uid;
-    private String name;
-    private String email;
-    private String mobile;
+    private Object qualifiedUser;
     private UserDetails user;
-
-    public AppUser(String uid, String name)
-    {
-        super();
-        this.uid = uid;
-        this.name = name;
-    }
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {

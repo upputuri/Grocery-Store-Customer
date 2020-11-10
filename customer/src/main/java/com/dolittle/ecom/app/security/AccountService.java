@@ -2,6 +2,7 @@ package com.dolittle.ecom.app.security;
 
 import com.dolittle.ecom.app.AppUser;
 import com.dolittle.ecom.app.security.bo.OTPRequest;
+import com.dolittle.ecom.app.util.CustomerRunnerUtil;
 import com.dolittle.ecom.customer.bo.Customer;
 import com.dolittle.ecom.customer.bo.LoginSession;
 
@@ -40,27 +41,7 @@ public class AccountService {
         if (auth == null)
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Error during authentication. Please try again or contact support!");
 
-        AppUser user = (AppUser)auth.getPrincipal();
-        Customer customer = null;
-        try{
-            String fetch_customer_sql = "select c.cuid, c.fname, c.lname, c.email, c.mobile, c.photo from customer c where c.uid=?";
-            customer = jdbcTemplateObject.queryForObject(fetch_customer_sql, new Object[]{user.getUid()}, (rs, rowNum) -> {
-                Customer c = new Customer();
-                c.setId(String.valueOf(rs.getInt("cuid")));
-                c.setFName(rs.getString("fname"));
-                c.setLName(rs.getString("lname"));
-                c.setEmail(rs.getString("email"));
-                c.setImage(rs.getString("photo"));
-                c.setMobile(rs.getString("mobile"));
-                return c;
-            });
-        }
-        catch(EmptyResultDataAccessException e)
-        {
-            log.error("Authentication failed with the supplied login credentials");
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid login Id or Password");            
-        }
-
+        Customer customer = CustomerRunnerUtil.fetchAuthCustomer(auth);
         String get_cart_count_sql = "select COALESCE(sum(quantity),0) from cart_item where cartid=(select cartid from cart where cuid=?) "+
                                     "and cartisid=(select cartisid from cart_item_status where name='Active')";
         int cartItemCount = jdbcTemplateObject.queryForObject(get_cart_count_sql, new Object[]{customer.getId()}, Integer.TYPE);
@@ -84,7 +65,7 @@ public class AccountService {
     {
         log.info("Processing send OTP request");
         
-        AppUser appUser = (AppUser)auth.getPrincipal();
+        Customer customer = CustomerRunnerUtil.fetchAuthCustomer(auth);
 
         if (otpRequest.getType().equals("email"))
         {
@@ -92,9 +73,9 @@ public class AccountService {
             SimpleMailMessage message = new SimpleMailMessage(); 
             message.setFrom(emailFromAddress);
             //TODO: hack, change it
-            String toEmailId = appUser.getEmail();
+            String toEmailId = customer.getEmail();
             if (toEmailId != null && toEmailId.length() > 0){
-                message.setTo(appUser.getEmail()); 
+                message.setTo(customer.getEmail()); 
             }
             else {
                 message.setTo("thevegitclub@gmail.com");

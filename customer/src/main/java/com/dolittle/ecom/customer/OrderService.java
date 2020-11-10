@@ -30,6 +30,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.BatchPreparedStatementSetter;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.simple.SimpleJdbcInsert;
+import org.springframework.security.core.Authentication;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -57,10 +58,10 @@ public class OrderService {
     CustomerRunner customerApp;
 
     @GetMapping(value = "/orders", produces = "application/hal+json")
-    public CollectionModel<OrderSummary> getOrders(@RequestParam String cuid, Principal principal)
+    public CollectionModel<OrderSummary> getOrders(@RequestParam String cuid, Authentication auth)
     {
         log.info("Processing get orders for customer id: "+cuid);
-        CustomerRunnerUtil.assertAuthCustomerId(jdbcTemplateObject, principal, cuid);
+        CustomerRunnerUtil.validateAndGetAuthCustomer(auth, cuid);
 
         List<OrderSummary> orders = new ArrayList<OrderSummary>();
         String get_orders_sql = "select oid, cuid, said, shipping_cost, tax_percent, price, discounted_price, ios.name, item_order.created_ts "+
@@ -86,7 +87,7 @@ public class OrderService {
                 Calendar order_ts = Calendar.getInstance();
                 order_ts.setTimeInMillis(rs.getTimestamp("created_ts").getTime());
                 os.setCreatedTS(order_ts);
-                Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getOrders(cuid, principal)).withSelfRel();
+                Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getOrders(cuid, auth)).withSelfRel();
                 os.add(selfLink);
                 return os;
             });
@@ -94,13 +95,13 @@ public class OrderService {
             log.error("An exception occurred while getting orders data for customerId: "+cuid, e);
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "An internal error occurred!, pls retry after some time or pls call support");
         }
-        Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getOrders(cuid, principal)).withSelfRel();
+        Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getOrders(cuid, auth)).withSelfRel();
         CollectionModel<OrderSummary> result = CollectionModel.of(orders, selfLink);
         return result;
     }
 
     @GetMapping(value="/orders/{orderId}")
-    public Order getOrderDetail(@PathVariable String orderId, Principal principal)
+    public Order getOrderDetail(@PathVariable String orderId, Authentication auth)
     {
         log.info("Processing request to get Order detail for orderId: "+orderId);
         String get_order_sql = "select io.oid, io.cuid, io.said, io.shipping_cost, io.tax_percent, io.price, io.discounted_price, ios.name as status, io.created_ts, "+
@@ -135,11 +136,11 @@ public class OrderService {
             sa.setState(rs.getString("state"));
             sa.setStateId(rs.getInt("stid"));
             o.setShippingAddress(sa);
-            Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getOrderDetail(orderId, principal)).withSelfRel();
+            Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getOrderDetail(orderId, auth)).withSelfRel();
             o.add(selfLink);
             return o;
         });
-        CustomerRunnerUtil.assertAuthCustomerId(jdbcTemplateObject, principal, order.getCustomerId());
+        CustomerRunnerUtil.validateAndGetAuthCustomer(auth, order.getCustomerId());
 
         String get_order_items = "select ioi.oiid, ioi.oid, ioi.iid, ioi.isvid, ioi.quantity, ioi.discounted_price, ii.name as item_name, insv.name as variant_name "+
                                 "from item_order_item ioi, inventory_set_variations as insv, item_item as ii "+
@@ -150,13 +151,13 @@ public class OrderService {
             oi.setName(rs.getString("item_name"));
             oi.setQtyUnit(rs.getString("variant_name"));
             oi.setPriceAfterDiscount(rs.getBigDecimal("discounted_price"));
-            Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getOrderDetail(orderId, principal)).withSelfRel();
+            Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getOrderDetail(orderId, auth)).withSelfRel();
             oi.add(selfLink);
             return oi;
         });
         
         order.setOrderItems(orderItems);
-        Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getOrderDetail(orderId, principal)).withSelfRel();
+        Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getOrderDetail(orderId, auth)).withSelfRel();
         order.add(selfLink);
 
         return order;
@@ -164,7 +165,7 @@ public class OrderService {
 
     @PostMapping(value = "/orders", produces = "application/hal+json")
     @Transactional
-    public Order createOrder(@RequestBody OrderContext orderContext, Principal principal)
+    public Order createOrder(@RequestBody OrderContext orderContext, Authentication auth)
     {
         // 1. Get the tax rate from tax profile
         // 2. Create order in db
@@ -174,8 +175,8 @@ public class OrderService {
         // 6. Change status of cart items in db to 'executed'
 
         log.info("Beginning to create an order for customer - "+orderContext.getCustomerId());
-        CustomerRunnerUtil.assertAuthCustomerId(jdbcTemplateObject, principal, orderContext.getCustomerId());
-        Order preOrder = this.createPreOrder(orderContext, principal);
+        CustomerRunnerUtil.validateAndGetAuthCustomer(auth, orderContext.getCustomerId());
+        Order preOrder = this.createPreOrder(orderContext, auth);
 
         int osid = jdbcTemplateObject.queryForObject("select osid from item_order_status where name='Initial'", Integer.TYPE);
 
@@ -271,13 +272,13 @@ public class OrderService {
 
     @PostMapping(value = "/orders/preorders", produces = "application/hal+json")
     @Transactional(propagation = Propagation.SUPPORTS)
-    public Order createPreOrder(@RequestBody OrderContext context , Principal principal)
+    public Order createPreOrder(@RequestBody OrderContext context , Authentication auth)
     {
         log.info("Beginning to create a preorder for customer - "+context.getCustomerId());
-        CustomerRunnerUtil.assertAuthCustomerId(jdbcTemplateObject, principal, context.getCustomerId());
+        CustomerRunnerUtil.validateAndGetAuthCustomer(auth, context.getCustomerId());
         Order order = new Order();
         order.setCustomerId(context.getCustomerId());
-        CollectionModel<CartItem> cartItemsModel = cartService.getCartItems(context.getCustomerId(), principal);
+        CollectionModel<CartItem> cartItemsModel = cartService.getCartItems(context.getCustomerId(), auth);
         cartItemsModel.forEach((cartItem) -> {
             order.addOrderItem(cartItem.getOrderItem());
             log.debug("Adding cart item to order "+cartItem.toString());
@@ -352,11 +353,11 @@ public class OrderService {
             sa.setLastName(rs.getString("last_name"));
             sa.setState(rs.getString("state"));
             sa.setStateId(rs.getInt("stid"));
-            Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).createPreOrder(context, principal)).withSelfRel();
+            Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).createPreOrder(context, auth)).withSelfRel();
             sa.add(selfLink);
             return sa;
         });
-        Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).createPreOrder(context, principal)).withSelfRel();
+        Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).createPreOrder(context, auth)).withSelfRel();
         order.add(selfLink);
         order.setShippingAddress(deliveryAddress);
         order.setShippingAddressId(context.getDeliveryAddressId());
@@ -364,11 +365,11 @@ public class OrderService {
     }
 
     @DeleteMapping(value = "/orders/{orderId}", produces="application/hal+json")
-    public void cancelOrder(@PathVariable String orderId, Principal principal){
+    public void cancelOrder(@PathVariable String orderId, Authentication auth){
         try{
             log.info("Processing request to cancel order Id: "+orderId);
             Number customerId = jdbcTemplateObject.queryForObject("select cuid from item_order where oid=?", new Object[]{orderId}, Integer.TYPE);
-            CustomerRunnerUtil.assertAuthCustomerId(jdbcTemplateObject, principal, customerId.toString());
+            CustomerRunnerUtil.validateAndGetAuthCustomer(auth, customerId.toString());
             String currentStatus = jdbcTemplateObject.queryForObject("select ios.name from item_order io, item_order_status ios where oid=? and io.osid = ios.osid",
                                                                  new Object[]{orderId}, String.class);
             if (currentStatus.trim().equals("Initial") || currentStatus.equals("Executing")){
