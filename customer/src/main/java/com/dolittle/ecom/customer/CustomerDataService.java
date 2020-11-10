@@ -122,6 +122,7 @@ public class CustomerDataService {
             c.setFName(customer.getFName());
             c.setLName(customer.getLName());
             c.setEmail(customer.getEmail());
+            c.setMobile(customer.getMobile());
             Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getCustomerProfile(String.valueOf(cuid), null)).withSelfRel();
             c.add(selfLink);
             log.info("Registered new customer with customer Id "+cuid);

@@ -111,10 +111,10 @@ public class ProductsService{
             String products_fetch_sql = "select i.iid, i.created_ts as created_ts, i.name as item_name, i.description, i.price, i.item_discount, p.imagefiles, "+
             "offers.discount as offer_discount, offers.amount as offer_amount "+score_col_sql+
             "from item_item as i left join (select oi.iid, discount, amount from offer_item oi, offer where offer.offid=oi.offid and offer.offsid= "+
-            "(select offsid from offer_status where name='Active')) as offers on (i.iid=offers.iid), "+
-            "item_item_status as s, item_gi_category as ic, category as c, "+
-            "(select iid, title, GROUP_CONCAT(image separator ',') as imagefiles from item_item_photo group by iid) as p "+
-            "where p.iid = i.iid and s.istatusid = i.istatusid and s.name = 'Active' and ic.giid = i.iid and c.catid = ic.catid "+
+            "(select offsid from offer_status where name='Active')) as offers on (i.iid=offers.iid) "+
+            "left join (select iid, title, GROUP_CONCAT(image separator ',') as imagefiles from item_item_photo group by iid) as p on (i.iid=p.iid), "+
+            "item_item_status as s, item_gi_category as ic, category as c "+
+            "where s.istatusid = i.istatusid and s.name = 'Active' and ic.giid = i.giid and c.catid = ic.catid "+
             iid_filter_sql+category_filter_sql+keyword_filter_sql+" group by i.iid order by "+orderby_sql+limit_sql
             ;
 
@@ -145,7 +145,9 @@ public class ProductsService{
                     // }
                     p.setDiscount(offerDiscount);
                     p.setCategoryId(categoryId);
-                    p.setImages(rs.getString("imagefiles").split(","));
+                    String imagesChained = rs.getString("imagefiles");
+                    String[] images = imagesChained != null && imagesChained.length()>0 ? imagesChained.split(","): new String[0];
+                    p.setImages(images);
                     p.setInStock(true);
                     p.setDescription(rs.getString("description"));
                     // InventorySetVariation variation = new InventorySetVariation(String.valueOf(rs.getInt("variation_id")), 
@@ -240,58 +242,79 @@ public class ProductsService{
         // where p.iid = i.iid and s.istatusid = i.istatusid;        
         // System.out.println(id);
         try{
-            Product product = jdbcTemplateObject.queryForObject(
-                "select i.iid, i.name as item_name, i.description, i.price, i.item_discount, i.istatusid, p.imagefiles, p.title, "+
-                "GROUP_CONCAT(distinct concat_ws('#', v.isvid, v.name,v.price,v.mrp, v.description) SEPARATOR ',') as variations, "+
-                "GROUP_CONCAT(distinct concat_ws('#', iag.name, ia.name, iav.value) SEPARATOR ',') as attributes, "+
-                "offers.discount as offer_discount, offers.amount as offer_amount "+
-                "from item_item as i left join (select oi.iid, discount, amount from offer_item oi, offer where offer.offid=oi.offid and offer.offsid= "+
-                "(select offsid from offer_status where name='Active')) as offers on (i.iid=offers.iid), "+
-                "item_item_status as s, "+
-                "item_gi as igi, item_gi_attribute as igia, item_attribute as ia, item_attribute_group as iag, item_attribute_value as iav, "+
-                "(select insv.isvid, insv.iid, insv.name, insv.description, ins.price, ins.mrp from inventory_set_variations insv, inventory_set ins  "+
-                "	where ins.isvid = insv.isvid order by insv.name) as v , "+
-                "(select iid, title, GROUP_CONCAT(image separator ',') as imagefiles from item_item_photo group by iid) as p "+
-                "where s.name = 'Active' and p.iid = i.iid and s.istatusid = i.istatusid and v.iid = i.iid and i.iid=? " +
-                "and i.giid = igi.giid and igia.giid = igi.giid and igia.aid = ia.aid and ia.agid = iag.agid and ia.atid = 1 and ia.aid = iav.aid",
+            // Product product = jdbcTemplateObject.queryForObject(
+            //     "select i.iid, i.name as item_name, i.description, i.price, i.item_discount, i.istatusid, p.imagefiles, p.title, "+
+            //     "GROUP_CONCAT(distinct concat_ws('#', v.isvid, v.name,v.price,v.mrp, v.description) SEPARATOR ',') as variations, "+
+            //     "GROUP_CONCAT(distinct concat_ws('#', iag.name, ia.name, iav.value) SEPARATOR ',') as attributes, "+
+            //     "offers.discount as offer_discount, offers.amount as offer_amount "+
+            //     "from item_item as i left join (select oi.iid, discount, amount from offer_item oi, offer where offer.offid=oi.offid and offer.offsid= "+
+            //     "(select offsid from offer_status where name='Active')) as offers on (i.iid=offers.iid), "+
+            //     "item_item_status as s, "+
+            //     "item_gi as igi, item_gi_attribute as igia, item_attribute as ia, item_attribute_group as iag, item_attribute_value as iav, "+
+            //     "(select insv.isvid, insv.iid, insv.name, insv.description, ins.price, ins.mrp from inventory_set_variations insv, inventory_set ins  "+
+            //     "	where ins.isvid = insv.isvid order by insv.name) as v , "+
+            //     "(select iid, title, GROUP_CONCAT(image separator ',') as imagefiles from item_item_photo group by iid) as p "+
+            //     "where s.name = 'Active' and p.iid = i.iid and s.istatusid = i.istatusid and v.iid = i.iid and i.iid=? " +
+            //     "and i.giid = igi.giid and igia.giid = igi.giid and igia.aid = ia.aid and ia.agid = iag.agid and ia.atid = 1 and ia.aid = iav.aid",
+            String fetch_product_detail_sql = "select i.iid, i.name as item_name, i.description, i.price, i.item_discount, i.istatusid, "+
+                                                "imagefiles, attributes, offers.discount as offer_discount, offers.amount as offer_amount "+
+                                                "from item_item as i "+
+                                                "left join (select oi.iid, discount, amount from offer_item oi, offer where offer.offid=oi.offid and offer.offsid= (select offsid from offer_status where name='Active')) as offers on (i.iid=offers.iid) "+
+                                                "left join (select iip.iid, GROUP_CONCAT(distinct iip.image SEPARATOR ',') as imagefiles from item_item_photo iip group by iip.iid) as p on (i.iid=p.iid) "+
+                                                "left join (select i.iid, "+
+                                                "GROUP_CONCAT(distinct concat_ws('#', iag.name, ia.name, iav.value) SEPARATOR ',') as attributes "+
+                                                "from item_gi igi inner join item_item i on (i.giid=igi.giid) "+
+                                                "                left join item_gi_attribute igia on (igi.giid = igia.giid) "+
+                                                "                inner join item_attribute ia on (igia.aid=ia.aid) "+
+                                                "                    left join item_attribute_group iag on (ia.agid=iag.agid) "+
+                                                "                    inner join item_attribute_value iav on (iav.aid=ia.aid) "+
+                                                "group by i.iid) as att on (att.iid=i.iid), "+
+                                                "item_item_status as s "+
+                                                "where s.name = 'Active' and s.istatusid = i.istatusid and i.iid=? group by i.iid ";
+
+            Product product = jdbcTemplateObject.queryForObject(fetch_product_detail_sql,
                 new Object[]{productId}, (rs, rowNumber) -> {
                     Product p = new Product(String.valueOf(rs.getInt("iid")), rs.getString("item_name"), rs.getBigDecimal("price"));
                     p.setDiscount(rs.getBigDecimal("offer_discount"));
                     p.setDescription(rs.getString("description"));
-                    p.setImages((rs.getString("imagefiles") != null ) ? rs.getString("imagefiles").split(","): null);
+                    p.setImages((rs.getString("imagefiles") != null ) ? rs.getString("imagefiles").split(","): new String[0]);
                     p.setInStock(true);
 
-                    BigDecimal offerDiscount = rs.getBigDecimal("offer_discount");
+                    // BigDecimal offerDiscount = rs.getBigDecimal("offer_discount");
                     //Parse variations
-                    String[] v_str = rs.getString("variations") != null ? rs.getString("variations").split(","): new String[0];
-                    List<InventorySetVariation> variations = new ArrayList<InventorySetVariation>();
-                    Arrays.stream(v_str).forEach((str) -> {
-                        String[] parts = str.split("#");
-                        BigDecimal variationPrice = new BigDecimal(parts[2]);
-                        BigDecimal variationPriceAfterDiscount = variationPrice;
-                        if (offerDiscount != null) {
-                            variationPriceAfterDiscount = variationPrice.subtract(variationPrice.multiply(offerDiscount.divide(new BigDecimal(100))));
-                        }                        
-                        InventorySetVariation v = new InventorySetVariation(parts[0], parts[1], variationPrice, new BigDecimal(parts[3]));
-                        v.setDescription(parts[4]);
-                        v.setPriceAfterDiscount(variationPriceAfterDiscount);
-                        variations.add(v);
-                    });
-                    p.setVariations(variations);
+                    // String[] v_str = rs.getString("variations") != null ? rs.getString("variations").split(","): new String[0];
+                    // List<InventorySetVariation> variations = new ArrayList<InventorySetVariation>();
+                    // Arrays.stream(v_str).forEach((str) -> {
+                    //     String[] parts = str.split("#");
+                    //     BigDecimal variationPrice = new BigDecimal(parts[2]);
+                    //     BigDecimal variationPriceAfterDiscount = variationPrice;
+                    //     if (offerDiscount != null) {
+                    //         variationPriceAfterDiscount = variationPrice.subtract(variationPrice.multiply(offerDiscount.divide(new BigDecimal(100))));
+                    //     }                        
+                    //     InventorySetVariation v = new InventorySetVariation(parts[0], parts[1], variationPrice, new BigDecimal(parts[3]));
+                    //     v.setDescription(parts[4]);
+                    //     v.setPriceAfterDiscount(variationPriceAfterDiscount);
+                    //     variations.add(v);
+                    // });
+                    // p.setVariations(variations);
 
                     //Parse attributes
                     String[] a_str = rs.getString("attributes") != null ? rs.getString("attributes").split(","): new String[0];
                     Map<String, Properties> attributes = new HashMap<String, Properties>();
-                    Arrays.stream(a_str).forEach((str) -> {
-                        String[] parts = str.split("#");
-                        if (attributes.get(parts[0]) == null)
-                        {
-                            Properties props = new Properties();
-                            attributes.put(parts[0], props);
-                        }
-                        
-                        attributes.get(parts[0]).setProperty(parts[1], parts[2]);
-                    });
+                    try{
+                        Arrays.stream(a_str).forEach((str) -> {
+                            String[] parts = str.split("\\#", -1);
+                            if (attributes.get(parts[0]) == null)
+                            {
+                                Properties props = new Properties();
+                                attributes.put(parts[0], props);
+                            }
+                            
+                            attributes.get(parts[0]).setProperty(parts[1], parts[2]);
+                        });
+                    }catch(Exception e){
+                        log.error("Exception thrown when parsing attributes for product Id: "+productId+". Discarding remaining attributes");
+                    }
                     p.setAttributes(attributes);
                     
                     Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getProductDetail(String.valueOf(rs.getInt("iid")))).withSelfRel();    
