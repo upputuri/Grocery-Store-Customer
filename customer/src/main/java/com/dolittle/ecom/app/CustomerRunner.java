@@ -337,9 +337,9 @@ public class CustomerRunner implements CommandLineRunner{
 			}
 
 			//Ensure account exists with this mobile
-			int uid = 0;
+			int cuid = 0;
 			try{
-				uid = jdbcTemplate.queryForObject("select uid from auser where user_id=?", new Object[]{otpRequest.getTarget()}, Integer.TYPE);
+				cuid = jdbcTemplate.queryForObject("select cuid from customer where mobile=?", new Object[]{otpRequest.getTarget()}, Integer.TYPE);
 			}catch(EmptyResultDataAccessException e){
 				log.error("No account registered with this mobile number");
 				throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No account registered with this mobile number");
@@ -348,8 +348,7 @@ public class CustomerRunner implements CommandLineRunner{
 			//Update in db
 			String passwordHash = passwordEncoder.encode(newPassword);
 			try{
-				jdbcTemplate.update("update customer set password=? where uid=?", passwordHash, uid);
-				jdbcTemplate.update("update auser set password=? where uid=?", passwordHash, uid);
+				jdbcTemplate.update("update customer set password=? where cuid=?", passwordHash, cuid);
 			}
 			catch(DataAccessException e)
 			{

@@ -57,7 +57,7 @@ public class CustomerDataService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Missing mandatory inputs in register request, check for email and password");
         //Check if customer exists
         try{
-            String fetch_customer_sql = "select au.uid from auser au where au.user_id=? or (length(au.email) > 0 and au.email=?)";
+            String fetch_customer_sql = "select cu.cuid from customer cu where (length(cu.mobile) > 0 and cu.mobile=?) or (length(cu.email) > 0 and cu.email=?)";
             customer = jdbcTemplateObject.queryForObject(fetch_customer_sql, new Object[]{customer.getMobile(), customer.getEmail()}, (rs, rowNum) -> {
                 // If control comes here, that means there's a customer record already in db with same email.
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "An account with the email/phone already exists");
@@ -70,25 +70,25 @@ public class CustomerDataService {
            //Good. We will now register this new user
         //    String passwordHash = CustomerRunnerUtil.generateBcryptPasswordHash(customer.getPassword());
             String passwordHash = passwordEncoder.encode(customer.getPassword());
-           int ustatusid = jdbcTemplateObject.queryForObject("select ustatusid from auser_status where name = 'Active'", Integer.TYPE);
-           SimpleJdbcInsert userJdbcInsert = new SimpleJdbcInsert(jdbcTemplateObject)
-                                                   .usingColumns("name", "user_id", "email", "password", "type_auser", "ustatusid")
-                                                   .withTableName("auser")
-                                                   .usingGeneratedKeyColumns("uid");
-            Map<String, Object> userParams = new HashMap<String, Object>(1);
-            userParams.put("name", customer.getFName()+ " "+customer.getLName());
-            userParams.put("email", customer.getEmail());
-            userParams.put("password", passwordHash);
-            userParams.put("user_id", customer.getMobile());
-            userParams.put("type_auser", 3);
-            userParams.put("ustatusid", ustatusid);        
-            Number uid = userJdbcInsert.executeAndReturnKey(userParams);
+        //    int ustatusid = jdbcTemplateObject.queryForObject("select ustatusid from auser_status where name = 'Active'", Integer.TYPE);
+        //    SimpleJdbcInsert userJdbcInsert = new SimpleJdbcInsert(jdbcTemplateObject)
+        //                                            .usingColumns("name", "user_id", "email", "password", "type_auser", "ustatusid")
+        //                                            .withTableName("auser")
+        //                                            .usingGeneratedKeyColumns("uid");
+        //     Map<String, Object> userParams = new HashMap<String, Object>(1);
+        //     userParams.put("name", customer.getFName()+ " "+customer.getLName());
+        //     userParams.put("email", customer.getEmail());
+        //     userParams.put("password", passwordHash);
+        //     userParams.put("user_id", customer.getMobile());
+        //     userParams.put("type_auser", 3);
+        //     userParams.put("ustatusid", ustatusid);        
+        //     Number uid = userJdbcInsert.executeAndReturnKey(userParams);
 
-            //Insert role records
-            String get_customer_role_id_sql = "select rid from arole where name='Customer'";
-            int rid = jdbcTemplateObject.queryForObject(get_customer_role_id_sql, Integer.TYPE);
-            String add_authority_sql = "insert into auser_role (uid, rid) value (?,?)";
-            jdbcTemplateObject.update(add_authority_sql, uid.intValue(), rid);
+        //     //Insert role records
+        //     String get_customer_role_id_sql = "select rid from arole where name='Customer'";
+        //     int rid = jdbcTemplateObject.queryForObject(get_customer_role_id_sql, Integer.TYPE);
+        //     String add_authority_sql = "insert into auser_role (uid, rid) value (?,?)";
+        //     jdbcTemplateObject.update(add_authority_sql, uid.intValue(), rid);
 
             //Now insert a customer record
             int custatusid = jdbcTemplateObject.queryForObject("select custatusid from customer_status where name = 'Active'", Integer.TYPE);
@@ -97,7 +97,7 @@ public class CustomerDataService {
                                                     .withTableName("customer")
                                                     .usingGeneratedKeyColumns("cuid");
             Map<String, Object> customerParams = new HashMap<String, Object>(1);
-            customerParams.put("uid", uid);
+            customerParams.put("uid", null);
             customerParams.put("fname", customer.getFName());
             customerParams.put("lname", customer.getLName());
             customerParams.put("email", customer.getEmail());
@@ -197,10 +197,9 @@ public class CustomerDataService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "You do not have permission to view details of the provided customer Id");
         }
 
-        AppUser appUser = (AppUser)auth.getPrincipal();
         if (profile.getEmail() != null && !profile.getEmail().equals(customer.getEmail()))
         {
-            String check_unique_username_sql = "select count(*) from auser where email=?";
+            String check_unique_username_sql = "select count(*) from customer where email=?";
             int count = jdbcTemplateObject.queryForObject(check_unique_username_sql, new Object[]{profile.getEmail()}, Integer.TYPE);
             if (count > 0) {
                 log.error("Invalid input. An account with the given email already exists.");
@@ -209,7 +208,7 @@ public class CustomerDataService {
         }
         if (profile.getMobile() != null && !profile.getMobile().equals(customer.getMobile()))
         {
-            String check_unique_username_sql = "select count(*) from auser where user_id=?";
+            String check_unique_username_sql = "select count(*) from customer where user_id=?";
             int count = jdbcTemplateObject.queryForObject(check_unique_username_sql, new Object[]{profile.getMobile()}, Integer.TYPE);
             if (count > 0) {
                 log.error("Invalid input. An account with the given mobile# already exists.");
@@ -222,8 +221,6 @@ public class CustomerDataService {
         try{
             jdbcTemplateObject.update("update customer set fname=?, lname=?, email=?, alt_email=?, dob=?, mobile=?, alt_mobile=?, password=? where cuid=?", 
                             profile.getFName(), profile.getLName(), profile.getEmail(), profile.getAltEmail(), strDate, profile.getMobile(), profile.getAltMobile(), passwordHash, customerId);
-            jdbcTemplateObject.update("update auser set name=?, email=?, user_id=?, password=? where uid=?", 
-                            profile.getFName()+" "+profile.getLName(), profile.getEmail(), profile.getMobile(), passwordHash, customer.getUid());
         }
         catch(DataAccessException e)
         {
