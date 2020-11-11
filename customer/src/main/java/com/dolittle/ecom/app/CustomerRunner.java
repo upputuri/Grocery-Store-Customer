@@ -6,9 +6,9 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import com.dolittle.ecom.app.bo.Subscriptions;
+import com.dolittle.ecom.app.security.GrocPasswordEncoder;
 import com.dolittle.ecom.app.security.bo.OTPRequest;
 import com.dolittle.ecom.app.util.CustomerRunnerUtil;
-import com.dolittle.ecom.customer.bo.LoginSession;
 import com.dolittle.ecom.customer.bo.general.PaymentOption;
 import com.dolittle.ecom.customer.bo.general.PromoCode;
 import com.dolittle.ecom.customer.bo.general.State;
@@ -32,12 +32,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -99,7 +96,8 @@ public class CustomerRunner implements CommandLineRunner{
 
 	@Bean
 	public PasswordEncoder getPasswordEncoder() {
-		return PasswordEncoderFactories.createDelegatingPasswordEncoder();
+		// return PasswordEncoderFactories.createDelegatingPasswordEncoder();
+		return new GrocPasswordEncoder();
 	}
 	// @RequestMapping("/application/users")
 	// public List<User> getAllUsers()

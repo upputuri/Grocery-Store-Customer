@@ -208,7 +208,7 @@ public class CustomerDataService {
         }
         if (profile.getMobile() != null && !profile.getMobile().equals(customer.getMobile()))
         {
-            String check_unique_username_sql = "select count(*) from customer where user_id=?";
+            String check_unique_username_sql = "select count(*) from customer where mobile=?";
             int count = jdbcTemplateObject.queryForObject(check_unique_username_sql, new Object[]{profile.getMobile()}, Integer.TYPE);
             if (count > 0) {
                 log.error("Invalid input. An account with the given mobile# already exists.");

@@ -4,18 +4,16 @@ import java.io.UnsupportedEncodingException;
 import java.math.BigInteger;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.security.Principal;
 import java.util.Random;
 
 import com.dolittle.ecom.app.AppUser;
+import com.dolittle.ecom.app.security.GrocPasswordEncoder;
 import com.dolittle.ecom.customer.bo.Customer;
 
-import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.http.HttpStatus;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.security.crypto.factory.PasswordEncoderFactories;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.server.ResponseStatusException;
 
 import lombok.extern.slf4j.Slf4j;
@@ -105,6 +103,7 @@ public class CustomerRunnerUtil {
      
     public static void main(String st[])
     {
-        System.out.println(PasswordEncoderFactories.createDelegatingPasswordEncoder().encode("Password123"));
+        PasswordEncoder encoder = new GrocPasswordEncoder();
+        System.out.println(encoder.encode("Abc123"));
     }
 }

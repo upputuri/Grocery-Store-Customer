@@ -38,10 +38,10 @@ public class AppUserDetailsService implements UserDetailsService {
         // String email_match_sql = " cu.email=?";
         // String mobile_match_sql = " cu.mobile=?";
 
-        String get_customer_profile_query = "select c.cuid, c.email, c.fname, c.lname, c.dob, c.mobile, c.alt_email, c.alt_mobile from customer c "+
-                                    "where (au.user_id = ? or au.email = ?) and c.custatusid = (select custatusid from customer_status where name='Active')";
+        String get_customer_profile_query = "select c.uid, c.cuid, c.email, c.password, c.fname, c.lname, c.dob, c.mobile, c.alt_email, c.alt_mobile, cs.name as user_status from customer c, "+
+                                    "customer_status cs where (c.mobile = ? or c.email = ?) and cs.custatusid=c.custatusid";
 
-        AppUser appUser = jdbcTemplateObject.queryForObject(get_customer_profile_query, new Object[]{username}, (rs, rowNum) -> {
+        AppUser appUser = jdbcTemplateObject.queryForObject(get_customer_profile_query, new Object[]{username, username}, (rs, rowNum) -> {
             GrantedAuthority ga = new SimpleGrantedAuthority("customer");
             UserDetails user = User.withUsername(username)
                             .password(rs.getString("password"))
