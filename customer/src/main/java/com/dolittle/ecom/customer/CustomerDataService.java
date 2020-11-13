@@ -28,6 +28,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -327,6 +328,31 @@ public class CustomerDataService {
             {
                 log.error("Failed to find an address record to update with the given query");
                 throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "The sql to update the address in db could not find a matching record with the given address Id: "+address.getId());
+            }
+        }
+        catch(DataAccessException e)
+        {
+            log.error("An exception occurred while inserting a new Shipping Address", e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "An internal error occurred!, pls retry after some time or pls call support");
+        }
+    }
+
+    @DeleteMapping(value = "/customers/{customerId}/addresses/{addressId}", produces = "application/hal+json")
+    public void removeAddress(@PathVariable(value = "customerId") String customerId, 
+                                            @PathVariable(value = "addressId") String addressId, 
+                                            Authentication auth)
+    {
+        try{  
+            log.info("Processing request to remove address of customer Id {} with addressId {}", customerId, addressId);
+            CustomerRunnerUtil.validateAndGetAuthCustomer(auth, customerId);
+            String address_update_sql = "delete from customer_shipping_address "+
+                                        "where said=?";
+                            
+            int rows = jdbcTemplateObject.update(address_update_sql, addressId);
+
+            if (rows != 1)
+            {
+                log.error("Failed to find an address record to delete with the given query. Returning a success response anyway.");
             }
         }
         catch(DataAccessException e)

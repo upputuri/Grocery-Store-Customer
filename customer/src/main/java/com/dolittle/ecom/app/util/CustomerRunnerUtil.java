@@ -5,6 +5,8 @@ import java.math.BigInteger;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Random;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import com.dolittle.ecom.app.AppUser;
 import com.dolittle.ecom.app.security.GrocPasswordEncoder;
@@ -105,5 +107,10 @@ public class CustomerRunnerUtil {
     {
         PasswordEncoder encoder = new GrocPasswordEncoder();
         System.out.println(encoder.encode("Abc123"));
+        // Pattern csv_regex = Pattern.compile("(?:^|,)\s*(?:(?:(?=\")\"([^\"].*?)\")|(?:(?!\")(.*?)))(?=,|$)", Pattern.CASE_INSENSITIVE);
+        // Matcher csv_matcher = csv_regex.matcher("abc,def,aldkj,slfkjsf");
+       
+        //Pattern PHONE_NUMBER_REGEX = Pattern.compile("^\\d{10}$");
+        //Matcher phoneMatcher = PHONE_NUMBER_REGEX.matcher(username);
     }
 }

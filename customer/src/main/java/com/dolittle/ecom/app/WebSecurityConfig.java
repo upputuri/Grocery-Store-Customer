@@ -44,7 +44,7 @@ public class WebSecurityConfig extends WebSecurityConfigurerAdapter {
                                 .authorizeRequests().antMatchers("/me").authenticated()
                                 .antMatchers("/customers/*/cart/items").authenticated()
                                 .antMatchers("/customers/*/cart").authenticated()
-                                .antMatchers("/customers/*").authenticated()
+                                .antMatchers("/customers/*/addresses", "/customers/*/addresses/*").authenticated()
                                 .antMatchers("/orders/*").authenticated()
                                 .antMatchers("/**").permitAll()
                                 .and()

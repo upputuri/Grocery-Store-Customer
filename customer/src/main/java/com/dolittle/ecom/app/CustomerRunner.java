@@ -1,11 +1,16 @@
 package com.dolittle.ecom.app;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import com.dolittle.ecom.app.bo.Subscriptions;
+import com.dolittle.ecom.app.bo.Variables;
 import com.dolittle.ecom.app.security.GrocPasswordEncoder;
 import com.dolittle.ecom.app.security.bo.OTPRequest;
 import com.dolittle.ecom.app.util.CustomerRunnerUtil;
@@ -94,11 +99,12 @@ public class CustomerRunner implements CommandLineRunner{
 		};
 	}	
 
-	@Bean
-	public PasswordEncoder getPasswordEncoder() {
-		// return PasswordEncoderFactories.createDelegatingPasswordEncoder();
-		return new GrocPasswordEncoder();
-	}
+	// @Bean
+	// public PasswordEncoder getPasswordEncoder() {
+	// 	// return PasswordEncoderFactories.createDelegatingPasswordEncoder();
+	// 	return new GrocPasswordEncoder();
+	// }
+
 	// @RequestMapping("/application/users")
 	// public List<User> getAllUsers()
 	// {
@@ -312,6 +318,9 @@ public class CustomerRunner implements CommandLineRunner{
 		}
 	}
 
+	// Reset password request from a registered user. The mobile number must be validated as belonging to the user before calling this endpoint.
+	// The implementation of this end point ensures the mobile number is verified to belong to a registered user before sending a new password to 
+	// the verified mobile number.
 	@PostMapping(value="/application/passwords")
 	@Transactional
 	public void resetPassword(@RequestBody OTPRequest otpRequest) {
@@ -374,6 +383,45 @@ public class CustomerRunner implements CommandLineRunner{
 			mailSender.send(message);
 			log.info("New Password sent to requested target");
         }
-
 	}
+
+	@GetMapping(value="/application/variables", produces="application/hal+json")
+	public Variables getVariables(@RequestParam(value="keys", required=true) String keyCsv) {
+		log.info("Processing request to get values of variables: "+keyCsv);
+		keyCsv = Arrays.stream(keyCsv.split(",")).map(key -> "'"+key+"'").collect(Collectors.joining(","));
+		String fetch_variables_query = "select vid, value from variable where vid in ("+keyCsv+")";
+		Map<String, String> vars = new HashMap<String, String>(1);
+		jdbcTemplate.query(fetch_variables_query, new Object[]{}, (rs, rowNum) -> {
+			String vid = rs.getString("vid");
+			String value = rs.getString("value");
+			vars.put(vid, value);
+			return null;
+		});
+		
+		Variables variables = new Variables();
+		variables.setVariables(vars);
+		Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getVariables(null)).withSelfRel();
+		variables.add(selfLink);
+		return variables;
+	}
+
+	@GetMapping(value="/application/socialhandles", produces="application/hal+json")
+	public Variables getVariables() {
+		log.info("Processing request to get values of social media handles: ");
+		String fetch_variables_query = "select swl.name, swd.url from social_widget_list swl, social_widget_list_status swls, social_widget_details swd, social_widget_details_status swds "+
+										"where swl.swlid = swd.swlid and swds.swdsid = swd.swdsid and swls.name='Active' and swds.name='Active' ORDER BY swdid ASC";
+		Map<String, String> vars = new HashMap<String, String>(1);
+		jdbcTemplate.query(fetch_variables_query, new Object[]{}, (rs, rowNum) -> {
+			String name = rs.getString("name");
+			String url = rs.getString("url");
+			vars.put(name, url);
+			return null;
+		});
+		
+		Variables variables = new Variables();
+		variables.setVariables(vars);
+		Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getVariables(null)).withSelfRel();
+		variables.add(selfLink);
+		return variables;
+	}	
 }
