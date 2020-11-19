@@ -15,6 +15,7 @@ import com.dolittle.ecom.customer.bo.ProductsPage;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
+import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.hateoas.CollectionModel;
 import org.springframework.hateoas.Link;
 import org.springframework.hateoas.server.mvc.WebMvcLinkBuilder;
@@ -95,7 +96,14 @@ public class ProductsService{
                                             "WHERE ii.istatusid = 1 GROUP BY ioi.iid ORDER BY COUNT( ioi.iid ) "+
                                             (sortOrder.equalsIgnoreCase("desc") ? "desc":"asc"+" limit 0, "+pageSize)+") as q "+
                                             "GROUP BY null";
-                String itemIdCsv = jdbcTemplateObject.queryForObject(items_by_sales_sql, String.class);
+                String itemIdCsv = "''";
+                try{    
+                    itemIdCsv = jdbcTemplateObject.queryForObject(items_by_sales_sql, String.class);
+                }
+                catch(EmptyResultDataAccessException e) {
+                    log.info("There are no products in the sales wise product listing");
+                    //Do nothing.
+                }
 
                 // iid_filter_sql = "and i.iid IN ("+items_by_sales_sql+") ";
                 iid_filter_sql = "and i.iid IN ("+itemIdCsv+") ";

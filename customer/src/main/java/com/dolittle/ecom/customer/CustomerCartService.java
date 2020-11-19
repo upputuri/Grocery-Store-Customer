@@ -2,19 +2,16 @@ package com.dolittle.ecom.customer;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.security.Principal;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.dolittle.ecom.app.util.CustomerRunnerUtil;
 import com.dolittle.ecom.customer.bo.Cart;
 import com.dolittle.ecom.customer.bo.CartItem;
 import com.dolittle.ecom.customer.bo.Customer;
-import com.dolittle.ecom.app.CustomerRunner;
-import com.dolittle.ecom.app.util.CustomerRunnerUtil;
 
-import org.apache.catalina.authenticator.SpnegoAuthenticator.AuthenticateAction;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.EmptyResultDataAccessException;
@@ -43,6 +40,7 @@ public class CustomerCartService
     @Autowired
     JdbcTemplate jdbcTemplateObject;
 
+    @Transactional
     @GetMapping(value="/customers/{id}/cart/items", produces="application/hal+json")
     public CollectionModel<CartItem> getCartItems(@PathVariable(value="id", required = true) String customerId, Authentication auth)
     {
@@ -56,7 +54,7 @@ public class CustomerCartService
             "inventory_set as ins, inventory_set_variations as insv, "+
             "(select iid, title, image from item_item_photo group by iid) as iip "+
             "where c.cuid = ? and c.cartid = ci.cartid and iip.iid = ii.iid and ci.iid = ii.iid and ci.cartisid = cis.cartisid and ins.isvid = ci.isvid and insv.isvid = ci.isvid "+
-            "and cis.name like 'active'";
+            "and cis.name = 'Active'";
 
             List<CartItem> cartItems = jdbcTemplateObject.query( sql, new Object[]{customer.getId()} , (rs, rowNumber) -> {
                 CartItem ci = new CartItem(String.valueOf(rs.getInt("iid")), String.valueOf(rs.getInt("isvid")));
@@ -129,7 +127,7 @@ public class CustomerCartService
                 Integer cartiid = jdbcTemplateObject.queryForObject(check_cartitem_exists_sql, 
                             new Object[]{customerId, cartItem.getProductId(), cartItem.getVariationId()}, Integer.TYPE);
                 //Update cart item
-                String update_cart_item_sql = "update cart_item set cartisid = CASE WHEN quantity = 1 and ?<0 THEN (select cartisid from cart_item_status where name='Inactive') "+
+                String update_cart_item_sql = "update cart_item set cartisid = CASE WHEN quantity+?<=0 THEN (select cartisid from cart_item_status where name='Inactive') "+
                                                 "else cartisid END, quantity= quantity+?, updated_ts= current_timestamp where cartiid=?";
                 int affected_row_count = jdbcTemplateObject.update(update_cart_item_sql, cartItem.getQty(), cartItem.getQty(), cartiid);
                 if (affected_row_count < 1)
@@ -142,23 +140,26 @@ public class CustomerCartService
             catch(EmptyResultDataAccessException e)
             {
                 //add new cart item
-                String add_cart_item_sql = "insert into cart_item (cartid, iid, isvid, quantity, cartisid) values ((select cartid from cart where cuid = ?), ?, ?, ?, (select cartisid from cart_item_status where name = 'Active'))";
-                KeyHolder keyHolder = new GeneratedKeyHolder();
-                int affected_row_count = jdbcTemplateObject.update(connection -> {
-                    PreparedStatement ps = connection.prepareStatement(add_cart_item_sql, Statement.RETURN_GENERATED_KEYS);
-                    ps.setInt(1, Integer.parseInt(customerId));
-                    ps.setInt(2, Integer.parseInt(cartItem.getProductId()));
-                    ps.setInt(3, Integer.parseInt(cartItem.getVariationId()));
-                    ps.setInt(4, cartItem.getQty());
-                    return ps;
-                }, keyHolder);
-
-
-                if (affected_row_count < 1)
+                if (cartItem.getQty() > 0)
                 {
-                    //TODO: Exception. Internal server error.
+                    String add_cart_item_sql = "insert into cart_item (cartid, iid, isvid, quantity, cartisid) values ((select cartid from cart where cuid = ?), ?, ?, ?, (select cartisid from cart_item_status where name = 'Active'))";
+                    KeyHolder keyHolder = new GeneratedKeyHolder();
+                    int affected_row_count = jdbcTemplateObject.update(connection -> {
+                        PreparedStatement ps = connection.prepareStatement(add_cart_item_sql, Statement.RETURN_GENERATED_KEYS);
+                        ps.setInt(1, Integer.parseInt(customerId));
+                        ps.setInt(2, Integer.parseInt(cartItem.getProductId()));
+                        ps.setInt(3, Integer.parseInt(cartItem.getVariationId()));
+                        ps.setInt(4, cartItem.getQty());
+                        return ps;
+                    }, keyHolder);
+
+
+                    if (affected_row_count < 1)
+                    {
+                        //TODO: Exception. Internal server error.
+                    }
+                    cartItem.setCartItemId(keyHolder.getKey().toString());
                 }
-                cartItem.setCartItemId(keyHolder.getKey().toString());
                 return cartItem;
             }
 
