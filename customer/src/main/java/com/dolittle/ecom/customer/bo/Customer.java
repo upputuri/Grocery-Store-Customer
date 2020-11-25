@@ -1,5 +1,6 @@
 package com.dolittle.ecom.customer.bo;
 
+import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
@@ -16,7 +17,7 @@ public @Data class Customer extends RepresentationModel<Customer>
     private String lName;
     private String email;
     private String altEmail;
-    private Date dob;
+    private String dob;
     private String mobile;
     private String altMobile;
     private String password;

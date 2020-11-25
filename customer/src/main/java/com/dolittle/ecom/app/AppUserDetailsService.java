@@ -72,7 +72,7 @@ public class AppUserDetailsService implements UserDetailsService {
                 c.setFName(rs.getString("fname"));
                 c.setLName(rs.getString("lname"));
                 c.setEmail(rs.getString("email"));
-                c.setDob(rs.getDate("dob"));
+                c.setDob(rs.getString("dob"));
                 c.setAltEmail(rs.getString("alt_email"));
                 c.setMobile(rs.getString("mobile"));
                 c.setAltMobile(rs.getString("alt_mobile"));

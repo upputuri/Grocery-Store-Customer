@@ -191,6 +191,7 @@ public class CustomerDataService {
     public void editProfile(@PathVariable String customerId, @RequestBody Customer profile, Authentication auth)
     {
         log.info("Processing edit profile request for customer Id: "+customerId);
+        log.info("Received profile object is"+profile.toString());
         Customer customer = CustomerRunnerUtil.fetchAuthCustomer(auth);
 
         if (!customer.getId().equals(customerId)){
@@ -216,8 +217,8 @@ public class CustomerDataService {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Mobile No. change not accepted. This mobile no.is registered with another account");
             }
         }
-        DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");  
-        String strDate = profile.getDob() != null ? dateFormat.format(profile.getDob()) : null;  
+        // DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");  
+        String strDate = profile.getDob() != null ? profile.getDob() : null;  
         String passwordHash = profile.getPassword() != null ? passwordEncoder.encode(profile.getPassword()) : null;
         try{
             jdbcTemplateObject.update("update customer set fname=?, lname=?, email=?, alt_email=?, dob=?, mobile=?, alt_mobile=?, password=? where cuid=?", 
