@@ -10,6 +10,8 @@ public @Data class OrderContext {
     private List<String> promoCodes = new ArrayList<String>();
     private String deliveryAddressId;
     private String paymentOptionId;
+    private String pgiProviderId;
+    private String pgiResponse;
     private String transactionId;
     private String instructions;
 }

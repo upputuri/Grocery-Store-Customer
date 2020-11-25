@@ -8,15 +8,19 @@ import lombok.Data;
 
 public @Data class Transaction extends RepresentationModel<Transaction>{
     private String id;
-    private String orderId;
+    private String providerId;
+    private String providerData;
+    private String paymentOrderId;
+    //Amount in INR in paisa
+    private int amount = 0;
+    private Object providerResponse;
+    private String statusId;
+    private String paymentOptionId;
     private Date ts;
-    private String type;
-    private String paymentOption;
 
-    public Transaction(String id, String orderId)
+    public Transaction(String id)
     {
         super();
         this.id = id;
-        this.orderId = orderId;
     }
 }

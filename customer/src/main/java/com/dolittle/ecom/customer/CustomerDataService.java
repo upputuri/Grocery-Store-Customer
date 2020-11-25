@@ -92,7 +92,7 @@ public class CustomerDataService {
         //     jdbcTemplateObject.update(add_authority_sql, uid.intValue(), rid);
 
             //Now insert a customer record
-            int custatusid = jdbcTemplateObject.queryForObject("select custatusid from customer_status where name = 'Active'", Integer.TYPE);
+            int custatusid = jdbcTemplateObject.queryForObject("select custatusid from customer_status where name = 'Email Unverified'", Integer.TYPE);
             SimpleJdbcInsert customerJdbcInsert = new SimpleJdbcInsert(jdbcTemplateObject)
                                                     .usingColumns("uid", "fname", "lname", "email", "password", "mobile", "alt_mobile", "custatusid")
                                                     .withTableName("customer")

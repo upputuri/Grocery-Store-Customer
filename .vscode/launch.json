@@ -48,7 +48,11 @@
             "env": {
                 "jdbcurl": "jdbc:mysql://localhost:3306/grocdb",
                 "dbuser": "grocadmin",
-                "dbpassword": "srikanth"
+                "dbpassword": "srikanth",
+                "razorpaykey": "rzp_live_TRXw4kJFKuZlop",
+                "razorpaysecret": "HpnnT6H7iJlhIdh6n3WcQ5DG",
+                "emailid": "thevegitclub.com",
+                "emailpassword": "Club@4848"
             }
         }
     ]

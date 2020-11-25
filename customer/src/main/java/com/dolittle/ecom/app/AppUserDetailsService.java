@@ -61,7 +61,7 @@ public class AppUserDetailsService implements UserDetailsService {
                 GrantedAuthority ga = new SimpleGrantedAuthority("customer");
                 UserDetails user = User.withUsername(username)
                                 .password(rs.getString("password"))
-                                .accountExpired(rs.getString("user_status").equals("Active") ? false : true)
+                                .accountExpired(rs.getString("user_status").equals("Active") || rs.getString("user_status").equals("Email Unverified") ? false : true)
                                 .accountLocked(false)
                                 .credentialsExpired(false)
                                 .authorities(ga).build();

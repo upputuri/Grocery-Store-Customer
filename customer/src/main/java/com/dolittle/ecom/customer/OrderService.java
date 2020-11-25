@@ -1,28 +1,33 @@
 package com.dolittle.ecom.customer;
 
+import java.beans.beancontext.BeanContext;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.security.Principal;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.dolittle.ecom.app.CustomerConfig;
 import com.dolittle.ecom.app.CustomerRunner;
 import com.dolittle.ecom.app.util.CustomerRunnerUtil;
 import com.dolittle.ecom.customer.bo.CartItem;
-import com.dolittle.ecom.customer.bo.Customer;
 import com.dolittle.ecom.customer.bo.Order;
 import com.dolittle.ecom.customer.bo.OrderContext;
 import com.dolittle.ecom.customer.bo.OrderItem;
 import com.dolittle.ecom.customer.bo.OrderSummary;
 import com.dolittle.ecom.customer.bo.ShippingAddress;
+import com.dolittle.ecom.customer.bo.Transaction;
 import com.dolittle.ecom.customer.bo.general.PromoCode;
+import com.dolittle.ecom.customer.payments.PGIService;
+import com.mysql.cj.util.StringUtils;
 
+import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.BeanFactoryAnnotationUtils;
+import org.springframework.context.ApplicationContext;
 import org.springframework.dao.DataAccessException;
-import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.hateoas.CollectionModel;
 import org.springframework.hateoas.Link;
 import org.springframework.hateoas.server.mvc.WebMvcLinkBuilder;
@@ -56,6 +61,12 @@ public class OrderService {
 
     @Autowired
     CustomerRunner customerApp;
+
+    @Autowired
+    CustomerConfig config;
+
+    @Autowired
+    ApplicationContext appContext;
 
     @GetMapping(value = "/orders", produces = "application/hal+json")
     public CollectionModel<OrderSummary> getOrders(@RequestParam String cuid, Authentication auth)
@@ -167,6 +178,27 @@ public class OrderService {
     @Transactional
     public Order createOrder(@RequestBody OrderContext orderContext, Authentication auth)
     {
+
+        // Check if the transaction state permits creation of order
+        String provider = config.getPgiProviders().get(orderContext.getPaymentOptionId());
+        PGIService pgiService = BeanFactoryAnnotationUtils.qualifiedBeanOfType(appContext, PGIService.class, provider);
+        String tran_id = orderContext.getTransactionId();
+        String orderString = jdbcTemplateObject.queryForObject("select response from transaction where tid=?", new Object[]{tran_id}, String.class);
+        int code = pgiService.validatePaymentResponse(orderString, orderContext.getPgiResponse());
+        
+        if (code != 0) {
+            Order order = new Order();
+            order.setId("-1"+code); // Payment transaction issue
+            return order;
+        }
+
+        // Update the transaction status
+        String newStatus = pgiService.getId().equalsIgnoreCase("cod") ? "'Pending'" : "'Success'";
+        String transaction_finalize_sql = "update transaction set tsid = (select tsid from transaction_status where name="+
+                                            newStatus+") where tid="+tran_id;
+        jdbcTemplateObject.update(transaction_finalize_sql);   
+
+
         // 1. Get the tax rate from tax profile
         // 2. Create order in db
         // 3. Add shipping address and link it to order
@@ -176,7 +208,7 @@ public class OrderService {
 
         log.info("Beginning to create an order for customer - "+orderContext.getCustomerId());
         CustomerRunnerUtil.validateAndGetAuthCustomer(auth, orderContext.getCustomerId());
-        Order preOrder = this.createPreOrder(orderContext, auth);
+        Order preOrder = this.createPreOrder(orderContext, true, auth);
 
         int osid = jdbcTemplateObject.queryForObject("select osid from item_order_status where name='Initial'", Integer.TYPE);
 
@@ -201,8 +233,22 @@ public class OrderService {
 
         Order order = preOrder;
         order.setId(oid.toString());
+        
+
+        // Now add a transaction - order mapping record in db
+
+        SimpleJdbcInsert mapTransactionJDBCInsert = new SimpleJdbcInsert(jdbcTemplateObject)
+                .usingColumns("oid", "tid")
+                .withTableName("item_order_transaction");
+        
+        Map<String, Object> parameters_insert_transaction_order = new HashMap<String, Object>(1);
+        parameters_insert_transaction_order.put("oid", oid);
+        parameters_insert_transaction_order.put("tid", tran_id);
+
+        mapTransactionJDBCInsert.execute(parameters_insert_transaction_order);
 
         String decrement_promocode_sql = "update promo_code set quantity = CASE WHEN quantity>0 THEN quantity-1 ELSE quantity END where pcid = ?";
+
         // No need to validate promocode once again as the createPreOrder call performed from within current transaction will ensure that.
         if (order.getAppliedPromoCodeIdList().size()>0) {
             jdbcTemplateObject.update(decrement_promocode_sql, order.getAppliedPromoCodeIdList().get(0));
@@ -271,8 +317,9 @@ public class OrderService {
     }
 
     @PostMapping(value = "/orders/preorders", produces = "application/hal+json")
-    @Transactional(propagation = Propagation.SUPPORTS)
-    public Order createPreOrder(@RequestBody OrderContext context , Authentication auth)
+    @Transactional
+    public Order createPreOrder(@RequestBody OrderContext context , 
+                @RequestParam(value="skiptransaction", required=false, defaultValue = "false") boolean skipTransaction, Authentication auth)
     {
         log.info("Beginning to create a preorder for customer - "+context.getCustomerId());
         CustomerRunnerUtil.validateAndGetAuthCustomer(auth, context.getCustomerId());
@@ -353,14 +400,66 @@ public class OrderService {
             sa.setLastName(rs.getString("last_name"));
             sa.setState(rs.getString("state"));
             sa.setStateId(rs.getInt("stid"));
-            Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).createPreOrder(context, auth)).withSelfRel();
+            Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).createPreOrder(context, false, auth)).withSelfRel();
             sa.add(selfLink);
             return sa;
         });
-        Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).createPreOrder(context, auth)).withSelfRel();
+        Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).createPreOrder(context, false, auth)).withSelfRel();
         order.add(selfLink);
         order.setShippingAddress(deliveryAddress);
         order.setShippingAddressId(context.getDeliveryAddressId());
+
+        //Start a payment transaction protocol if a paymentOptionId is available in OrderContext
+        // if (StringUtils.isNullOrEmpty(context.getTransactionId()) && 
+        if(!StringUtils.isNullOrEmpty(context.getPaymentOptionId()) && !skipTransaction) {
+            // && context.getPgiResponse() == null) {
+            // Add the payment gateway provider name mapped to this id
+            int tsid = jdbcTemplateObject.queryForObject("select tsid from transaction_status where name='Approved'", Integer.TYPE);
+            // Create a new transaction in db
+            String provider = config.getPgiProviders().get(context.getPaymentOptionId());
+            PGIService pgiService = BeanFactoryAnnotationUtils.qualifiedBeanOfType(appContext, PGIService.class, provider);
+            int transactionAmount = order.getFinalTotal().multiply(new BigDecimal(100)).intValue();
+            SimpleJdbcInsert jdbcInsert_transaction = new SimpleJdbcInsert(jdbcTemplateObject)
+                        .usingColumns("cuid", "cpoid", "tsid", "amount", "discount_amt")
+                        .withTableName("transaction")
+                        .usingGeneratedKeyColumns("tid");
+            Map<String, Object> parameters_insert_transaction = new HashMap<String, Object>(1);
+            parameters_insert_transaction.put("cuid", context.getCustomerId());
+            parameters_insert_transaction.put("cpoid", context.getPaymentOptionId());
+            parameters_insert_transaction.put("tsid", tsid);
+            parameters_insert_transaction.put("amount", order.getFinalTotal());
+            parameters_insert_transaction.put("discount_amt", order.getTotalDiscountValue());        
+            
+            Number tran_id = jdbcInsert_transaction.executeAndReturnKey(parameters_insert_transaction);
+            Transaction transaction = new Transaction(tran_id.toString());
+            transaction.setAmount(transactionAmount);
+            transaction.setPaymentOptionId(context.getPaymentOptionId());
+            
+            String providerData = pgiService.startTransaction(transactionAmount, tran_id.toString());
+            // Inject a payment gateway provider and its data
+            transaction.setProviderId(provider);
+            transaction.setProviderData(providerData);
+            // JSONObject orderJSON = new JSONObject(orderString);
+            // transaction.setPaymentOrderId(orderJSON.getString("id"));
+            order.setTransaction(transaction);
+
+            // Add the pgi's payment order object to the transaction in db
+            jdbcTemplateObject.update("update transaction set response=? where tid="+tran_id, providerData);
+        }
+        // else if (!StringUtils.isNullOrEmpty(context.getTransactionId())) {
+        //     // We are already inside a transaction. Fetch the transaction details from db only (do not use those from request) and attach to order.
+        //     String fetch_transaction_sql = "select tid, cpoid, tsid, amount, response from transaction where tid=?";
+        //     Transaction transaction = jdbcTemplateObject.queryForObject(fetch_transaction_sql, new Object[]{context.getTransactionId()}, (rs, rowNum) -> {
+        //         Transaction tran = new Transaction(String.valueOf(rs.getInt("tid")));
+        //         tran.setPaymentOptionId(String.valueOf(rs.getInt("cpoid")));
+        //         tran.setStatusId(String.valueOf(rs.getInt("tsid")));
+        //         tran.setAmount(rs.getBigDecimal("amount").multiply(new BigDecimal(100)).intValue());
+        //         tran.setProviderResponse(rs.getString("response"));
+        //         return tran;
+        //     });
+
+        //     order.setTransaction(transaction);
+        // }
         return order;
     }
 
