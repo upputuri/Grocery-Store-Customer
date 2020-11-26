@@ -2,6 +2,13 @@
     "configurations": [
         {
             "type": "java",
+            "name": "CodeLens (Launch) - CustomerRunnerUtil",
+            "request": "launch",
+            "mainClass": "com.dolittle.ecom.app.util.CustomerRunnerUtil",
+            "projectName": "customer"
+        },
+        {
+            "type": "java",
             "name": "CodeLens (Launch) - CustomerAppUtil",
             "request": "launch",
             "mainClass": "com.dolittle.ecom.customer.util.CustomerAppUtil",
@@ -27,6 +34,25 @@
                 "jdbcurl": "jdbc:mysql://localhost:3306/grocdb",
                 "dbuser": "grocadmin",
                 "dbpassword": "srikanth"
+            }
+        },
+        {
+            "type": "java",
+            "name": "Spring Boot-CustomerRunner<customer>",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "console": "internalConsole",
+            "mainClass": "com.dolittle.ecom.app.CustomerRunner",
+            "projectName": "customer",
+            "args": [],
+            "env": {
+                "jdbcurl": "jdbc:mysql://localhost:3306/grocdb",
+                "dbuser": "grocadmin",
+                "dbpassword": "srikanth",
+                "razorpaykey": "rzp_live_TRXw4kJFKuZlop",
+                "razorpaysecret": "HpnnT6H7iJlhIdh6n3WcQ5DG",
+                "emailid": "thevegitclub.com",
+                "emailpassword": "Club@4848"
             }
         }
     ]

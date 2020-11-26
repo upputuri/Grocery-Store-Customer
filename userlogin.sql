@@ -4,6 +4,8 @@ select * from customer_status;
 select * from auser;
 desc auser;
 select * from auser_role;
+select * from arole_status;
+select * from arole;
 select * from auser_session;
 select * from auser_session_status;
 select * from auser_status;
@@ -28,7 +30,19 @@ insert into auser (name, email, password, type_auser, ustatusid) values (?, ?, ?
 
 insert into customer (uid, fname, lname, email, password) values (?, ?, ?, ?, ?);
 
+insert into auser_role (uid, rid) value (?, ?);
+
 update customer set salutation=1, email='usrikanth@5roads.in' where cuid='618';
 
+select au.uid, au.user_id, au.name, au.email, au.password, aus.name as user_status, ar.name as role_name, ars.name as role_status 
+                                from auser au, auser_status as aus, arole as ar, arole_status ars, auser_role as aur
+                                where au.ustatusid = aus.ustatusid and ars.rsid = ar.rsid and ar.rid=aur.rid and aur.uid = au.uid and au.user_id='usrikanth@gmail.com';
+                                
+select c.cuid, c.uid, c.email, c.fname, c.lname from customer c, auser au
+                                    where au.uid= c.uid and au.user_id = 'usrikanth@gmail.com' and c.cuid = '618' and c.custatusid = (select custatusid from customer_status where name='Active');                                
 
+select au.uid from auser au where (length(au.email)>0 and au.email='') or au.user_id=9845281139;
 
+select au.uid, au.user_id, au.name, au.email, au.password, aus.name as user_status, ar.name as role_name, ars.name as role_status 
+from auser au, auser_status as aus, arole as ar, arole_status ars, auser_role as aur  
+where au.ustatusid = aus.ustatusid and ars.rsid = ar.rsid and ar.rid=aur.rid and aur.uid = au.uid and  au.user_id='9845281139';

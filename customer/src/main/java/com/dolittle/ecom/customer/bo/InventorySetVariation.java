@@ -13,7 +13,10 @@ import lombok.Data;
 
 public @Data class InventorySetVariation extends RepresentationModel<InventorySetVariation>{
     private String id;
+    private String productId;
     private String name;
+    private int availableQty;
+    private int orderedQty;
     @JsonProperty(access = Access.READ_ONLY)
     @JsonFormat(shape = JsonFormat.Shape.STRING) 
     private BigDecimal price;
@@ -36,5 +39,9 @@ public @Data class InventorySetVariation extends RepresentationModel<InventorySe
     public void setPriceAfterDiscount(BigDecimal value)
     {
         this.priceAfterDiscount = value.setScale(2, RoundingMode.HALF_EVEN);
+    }
+
+    public boolean isInStock() {
+        return availableQty - orderedQty > 0;
     }
 }
