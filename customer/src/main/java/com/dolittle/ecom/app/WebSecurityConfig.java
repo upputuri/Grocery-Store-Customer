@@ -49,6 +49,7 @@ public class WebSecurityConfig extends WebSecurityConfigurerAdapter {
                                 .antMatchers("/customers/*/cart").authenticated()
                                 .antMatchers("/customers/*/addresses", "/customers/*/addresses/*").authenticated()
                                 .antMatchers("/orders/*").authenticated()
+                                .antMatchers("runners/**").authenticated()
                                 .antMatchers("/**").permitAll()
                                 .and()
                                 .httpBasic();//.authenticationEntryPoint(authenticationEntryPoint);

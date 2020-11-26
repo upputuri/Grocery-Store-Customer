@@ -1,6 +1,5 @@
 package com.dolittle.ecom.app.security;
 
-import com.dolittle.ecom.app.AppUser;
 import com.dolittle.ecom.app.security.bo.OTPRequest;
 import com.dolittle.ecom.app.util.CustomerRunnerUtil;
 import com.dolittle.ecom.customer.bo.Customer;
@@ -8,7 +7,6 @@ import com.dolittle.ecom.customer.bo.LoginSession;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mail.SimpleMailMessage;
@@ -24,7 +22,7 @@ import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 @RestController
-public class AccountService {
+public class CustomerAccountService {
     
     @Autowired
     private JdbcTemplate jdbcTemplateObject;
@@ -35,7 +33,7 @@ public class AccountService {
     @Value("${spring.mail.username}")
     private String emailFromAddress;
     
-    @GetMapping(value="/me", produces = "application/hal+json")
+    @GetMapping(value="/customers/me", produces = "application/hal+json")
     public LoginSession getLoginSession(Authentication auth)
     {
         if (auth == null)
@@ -60,7 +58,7 @@ public class AccountService {
         return loginSession;
     }
 
-    @PostMapping(value = "/me/otptokens")
+    @PostMapping(value = "/customers/me/otptokens")
     public void sendOTP(@RequestBody OTPRequest otpRequest, Authentication auth)
     {
         log.info("Processing send OTP request");

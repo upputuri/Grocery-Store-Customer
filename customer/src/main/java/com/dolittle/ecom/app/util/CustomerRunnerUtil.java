@@ -12,6 +12,7 @@ import java.util.regex.Pattern;
 import com.dolittle.ecom.app.AppUser;
 import com.dolittle.ecom.app.security.GrocPasswordEncoder;
 import com.dolittle.ecom.customer.bo.Customer;
+import com.dolittle.ecom.runner.Runner;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
@@ -84,6 +85,35 @@ public class CustomerRunnerUtil {
         }
     }
 
+    public static Runner validateAndGetAuthRunner(Authentication auth, String runnerId)
+    {
+        try{
+            Runner c = (Runner)((AppUser)auth.getPrincipal()).getQualifiedUser();
+            if (!runnerId.equals(c.getId())) {
+                throw new Exception();
+            }
+            return c;
+        }
+        catch(Exception e)
+        {
+            log.error("Requested runner Id does not match with authenticated user or the runner is inactive");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "You do not have permission to view details of the provided Runner Id");
+        }
+    }
+
+    public static Runner fetchAuthRunner(Authentication auth)
+    {
+        try{
+            Runner c = (Runner)((AppUser)auth.getPrincipal()).getQualifiedUser();
+            return c;
+        }
+        catch(Exception e)
+        {
+            log.error("Unknown user");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown user");
+        }
+    }
+
     public static char[] generatePassword(int length) {
         String capitalCaseLetters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
         String lowerCaseLetters = "abcdefghijklmnopqrstuvwxyz";
@@ -106,16 +136,16 @@ public class CustomerRunnerUtil {
      
     public static void main(String st[])
     {
-        // PasswordEncoder encoder = new GrocPasswordEncoder();
-        // System.out.println(encoder.encode("Abc123"));
+        PasswordEncoder encoder = new GrocPasswordEncoder();
+        System.out.println(encoder.encode("Abc123"));
         // Pattern csv_regex = Pattern.compile("(?:^|,)\s*(?:(?:(?=\")\"([^\"].*?)\")|(?:(?!\")(.*?)))(?=,|$)", Pattern.CASE_INSENSITIVE);
         // Matcher csv_matcher = csv_regex.matcher("abc,def,aldkj,slfkjsf");
        
         //Pattern PHONE_NUMBER_REGEX = Pattern.compile("^\\d{10}$");
         //Matcher phoneMatcher = PHONE_NUMBER_REGEX.matcher(username);
 
-        String date = "2020-11-25T11:26:22+05:30";
-        ZonedDateTime zdt = ZonedDateTime.parse(date);
-        System.out.println(zdt.getYear()+"-"+zdt.getMonthValue()+"-"+zdt.getDayOfMonth());
+        // String date = "2020-11-25T11:26:22+05:30";
+        // ZonedDateTime zdt = ZonedDateTime.parse(date);
+        // System.out.println(zdt.getYear()+"-"+zdt.getMonthValue()+"-"+zdt.getDayOfMonth());
     }
 }

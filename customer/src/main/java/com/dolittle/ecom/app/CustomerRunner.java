@@ -52,7 +52,7 @@ import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 
 // @SpringBootApplication
-@ComponentScan("com.dolittle.ecom.customer, com.dolittle.ecom.app")
+@ComponentScan("com.dolittle.ecom.customer, com.dolittle.ecom.runner, com.dolittle.ecom.app")
 @SpringBootApplication(exclude = { SecurityAutoConfiguration.class })
 @RestController
 @Configuration
