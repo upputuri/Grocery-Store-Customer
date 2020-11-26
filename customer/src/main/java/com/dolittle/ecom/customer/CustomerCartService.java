@@ -112,7 +112,7 @@ public class CustomerCartService
     
     //This can very well be made a void function. Returning a cartitem may not be necessary.
     @Transactional
-    @PostMapping(value = "/customers/{customerId}/cart", produces = "application/hal+json")
+    @PostMapping(value = "/customers/{customerId}/cart" , produces = "application/hal+json")
     public CartItem addOrUpdateItemToCart(@PathVariable(value="customerId", required = true) String customerId, @RequestBody CartItem cartItem, Authentication auth)
     {
         // If user doesn't have a cart yet, create a cart?
@@ -127,7 +127,7 @@ public class CustomerCartService
                 Integer cartiid = jdbcTemplateObject.queryForObject(check_cartitem_exists_sql, 
                             new Object[]{customerId, cartItem.getProductId(), cartItem.getVariationId()}, Integer.TYPE);
                 //Update cart item
-                String update_cart_item_sql = "update cart_item set cartisid = CASE WHEN quantity+?<=0 THEN (select cartisid from cart_item_status where name='Inactive') "+
+                String update_cart_item_sql = "update cart_item set cartisid = CASE WHEN quantity+?<=0 THEN (select cartisid from cart_item_status where name='Delete') "+
                                                 "else cartisid END, quantity= quantity+?, updated_ts= current_timestamp where cartiid=?";
                 int affected_row_count = jdbcTemplateObject.update(update_cart_item_sql, cartItem.getQty(), cartItem.getQty(), cartiid);
                 if (affected_row_count < 1)
