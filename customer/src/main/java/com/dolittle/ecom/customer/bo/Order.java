@@ -26,6 +26,8 @@ public @Data class Order extends RepresentationModel<Order>{
     private List<OrderItem> orderItems = new ArrayList<OrderItem>();
     private String shippingAddressId;
     private ShippingAddress shippingAddress;
+    private String billingAddressId;
+    private ShippingAddress billingAddress;
     @JsonProperty(access = Access.READ_ONLY)    
     private String status = "preparing";
     private List<String> appliedPromoCodeIdList = new ArrayList<String>();

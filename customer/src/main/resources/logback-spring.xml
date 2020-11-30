@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <include resource="org/springframework/boot/logging/logback/defaults.xml" />
+    <property name="LOG_FILE" value="${LOG_FILE:-${LOG_PATH:-${LOG_TEMP:-${java.io.tmpdir:-/tmp}}/}spring.log}"/>
+    <include resource="org/springframework/boot/logging/logback/file-appender.xml"/>
+
+    <root level="INFO">
+        <appender-ref ref="FILE" />
+    </root>
+    <logger name="com.dolittle" level="DEBUG">
+        <appender-ref ref="FILE" />
+    </logger>
+    <logger name="org.apache.coyote" level="DEBUG">
+        <appender-ref ref="FILE" />
+    </logger>
+</configuration>

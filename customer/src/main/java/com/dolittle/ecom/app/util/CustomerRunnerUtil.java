@@ -4,10 +4,7 @@ import java.io.UnsupportedEncodingException;
 import java.math.BigInteger;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.time.ZonedDateTime;
 import java.util.Random;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import com.dolittle.ecom.app.AppUser;
 import com.dolittle.ecom.app.security.GrocPasswordEncoder;
@@ -18,11 +15,13 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Component;
 import org.springframework.web.server.ResponseStatusException;
 
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
+@Component
 public class CustomerRunnerUtil {
 
     public static String generateSHA256PasswordHash(String password)
@@ -137,7 +136,7 @@ public class CustomerRunnerUtil {
     public static void main(String st[])
     {
         PasswordEncoder encoder = new GrocPasswordEncoder();
-        System.out.println(encoder.encode("Abc123"));
+        System.out.println(encoder.encode("Dolittle123"));
         // Pattern csv_regex = Pattern.compile("(?:^|,)\s*(?:(?:(?=\")\"([^\"].*?)\")|(?:(?!\")(.*?)))(?=,|$)", Pattern.CASE_INSENSITIVE);
         // Matcher csv_matcher = csv_regex.matcher("abc,def,aldkj,slfkjsf");
        

@@ -1,6 +1,5 @@
 package com.dolittle.ecom.customer;
 
-import java.beans.beancontext.BeanContext;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
@@ -13,6 +12,7 @@ import com.dolittle.ecom.app.CustomerConfig;
 import com.dolittle.ecom.app.CustomerRunner;
 import com.dolittle.ecom.app.util.CustomerRunnerUtil;
 import com.dolittle.ecom.customer.bo.CartItem;
+import com.dolittle.ecom.customer.bo.Customer;
 import com.dolittle.ecom.customer.bo.Order;
 import com.dolittle.ecom.customer.bo.OrderContext;
 import com.dolittle.ecom.customer.bo.OrderItem;
@@ -23,7 +23,6 @@ import com.dolittle.ecom.customer.bo.general.PromoCode;
 import com.dolittle.ecom.customer.payments.PGIService;
 import com.mysql.cj.util.StringUtils;
 
-import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.BeanFactoryAnnotationUtils;
 import org.springframework.context.ApplicationContext;
@@ -36,7 +35,6 @@ import org.springframework.jdbc.core.BatchPreparedStatementSetter;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.simple.SimpleJdbcInsert;
 import org.springframework.security.core.Authentication;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -75,8 +73,9 @@ public class OrderService {
         CustomerRunnerUtil.validateAndGetAuthCustomer(auth, cuid);
 
         List<OrderSummary> orders = new ArrayList<OrderSummary>();
-        String get_orders_sql = "select oid, cuid, said, shipping_cost, tax_percent, price, discounted_price, ios.name, item_order.created_ts "+
-                                "from item_order, item_order_status as ios where cuid=? and item_order.osid = ios.osid order by item_order.created_ts desc";
+        String get_orders_sql = "select item_order.oid, said, shipping_cost, tax_percent, price, discounted_price, ios.name, transaction.created_ts, iot.tid "+
+                                "from item_order, item_order_status as ios, item_order_transaction iot, transaction where item_order.cuid=? and item_order.osid = ios.osid "+
+                                "and iot.oid = item_order.oid and transaction.tid = iot.tid order by transaction.created_ts desc";
         try {
             orders = jdbcTemplateObject.query(get_orders_sql, new Object[]{cuid}, (rs, rowNum) -> {
                 OrderSummary os = new OrderSummary();
@@ -87,7 +86,7 @@ public class OrderService {
                 BigDecimal totalTaxValue = totalPriceAfterCharges.multiply(taxRate.divide(new BigDecimal(100)));
                 BigDecimal totalPriceAfterTaxes = totalPriceAfterCharges.add(totalTaxValue);
                 os.setOrderId(String.valueOf(rs.getInt("oid")));
-                os.setCustomerId(String.valueOf(rs.getInt("cuid")));
+                os.setCustomerId(cuid);
                 os.setShippingAddressId(String.valueOf(rs.getInt("said")));
                 os.setOrderTotal(rs.getBigDecimal("price"));
                 os.setDiscountedTotal(totalPriceAfterDiscounts);
@@ -95,6 +94,7 @@ public class OrderService {
                 os.setTotalChargesValue(totalChargesValue);
                 os.setTotalTaxValue(totalTaxValue);
                 os.setFinalTotal(totalPriceAfterTaxes);
+                os.setTransactionId(String.valueOf(rs.getInt("tid")));
                 Calendar order_ts = Calendar.getInstance();
                 order_ts.setTimeInMillis(rs.getTimestamp("created_ts").getTime());
                 os.setCreatedTS(order_ts);
@@ -115,10 +115,11 @@ public class OrderService {
     public Order getOrderDetail(@PathVariable String orderId, Authentication auth)
     {
         log.info("Processing request to get Order detail for orderId: "+orderId);
-        String get_order_sql = "select io.oid, io.cuid, io.said, io.shipping_cost, io.tax_percent, io.price, io.discounted_price, ios.name as status, io.created_ts, "+
-                                "sa.shipping_first_name, sa.shipping_last_name, sa.shipping_line1, sa.shipping_line2, sa.shipping_city, sa.shipping_zip_code, state.state, state.stid, "+
-                                "sa.shipping_mobile from item_order as io, item_order_status as ios, item_order_shipping_address as sa, state where io.oid=? and sa.oid = io.oid "+
-                                "and io.osid = ios.osid and sa.shipping_stid = state.stid";
+        String get_order_sql = "select io.oid, io.cuid, io.said, io.baid, io.shipping_cost, io.tax_percent, io.price, io.discounted_price, ios.name as status, transaction.created_ts, "+
+                                "sa.shipping_first_name, sa.shipping_last_name, sa.shipping_line1, sa.shipping_line2, sa.shipping_city, sa.shipping_zip_code, "+
+                                "sa.shipping_mobile, billing_first_name, billing_last_name, billing_line1, billing_line2, billing_city, billing_zip_code, billing_mobile "+
+                                "from item_order as io, item_order_transaction as iot, transaction, item_order_status as ios, item_order_shipping_address as sa where io.oid=? and sa.oid = io.oid "+
+                                "and io.osid = ios.osid and io.oid = iot.oid and iot.tid = transaction.tid";
         Order order = jdbcTemplateObject.queryForObject(get_order_sql, new Object[]{orderId}, (rs, rowNum) -> {
             Order o = new Order();
             BigDecimal discountedTotal = rs.getBigDecimal("discounted_price").setScale(2, RoundingMode.HALF_EVEN);
@@ -130,8 +131,12 @@ public class OrderService {
             BigDecimal totalPriceAfterTaxes = totalPriceAfterCharges.add(totalTaxValue);
             totalPriceAfterTaxes = totalPriceAfterTaxes.setScale(2, RoundingMode.HALF_EVEN);
             o.setId(String.valueOf(rs.getInt("oid")));
+            Calendar order_ts = Calendar.getInstance();
+            order_ts.setTimeInMillis(rs.getTimestamp("created_ts").getTime());
+            o.setCreatedTS(order_ts);
             o.setCustomerId(String.valueOf(rs.getInt("cuid")));
             o.setShippingAddressId(String.valueOf(rs.getInt("said")));
+            o.setBillingAddressId(String.valueOf(rs.getInt("baid")));
             o.setDiscountedTotal(discountedTotal);
             o.setStatus(rs.getString("status"));
             o.setTotalChargesValue(totalChargesValue.setScale(2, RoundingMode.HALF_EVEN));
@@ -144,9 +149,16 @@ public class OrderService {
             sa.setLine2(rs.getString("shipping_line2"));
             sa.setFirstName(rs.getString("shipping_first_name"));
             sa.setLastName(rs.getString("shipping_last_name"));
-            sa.setState(rs.getString("state"));
-            sa.setStateId(rs.getInt("stid"));
+            // sa.setState(rs.getString("shipping_state"));
             o.setShippingAddress(sa);
+            ShippingAddress ba = new ShippingAddress(rs.getString("billing_line1"), rs.getString("billing_city"), rs.getString("billing_zip_code"), rs.getString("billing_mobile"));
+            ba.setId(String.valueOf(rs.getInt("baid")));
+            ba.setLine2(rs.getString("billing_line2"));
+            ba.setFirstName(rs.getString("billing_first_name"));
+            ba.setLastName(rs.getString("billing_last_name"));
+            // sa.setState(rs.getString("billing_state"));
+            o.setBillingAddress(ba);
+
             Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getOrderDetail(orderId, auth)).withSelfRel();
             o.add(selfLink);
             return o;
@@ -178,7 +190,8 @@ public class OrderService {
     @Transactional
     public Order createOrder(@RequestBody OrderContext orderContext, Authentication auth)
     {
-
+        
+        CustomerRunnerUtil.validateAndGetAuthCustomer(auth, orderContext.getCustomerId());
         // Check if the transaction state permits creation of order
         String provider = config.getPgiProviders().get(orderContext.getPaymentOptionId());
         PGIService pgiService = BeanFactoryAnnotationUtils.qualifiedBeanOfType(appContext, PGIService.class, provider);
@@ -191,6 +204,13 @@ public class OrderService {
             order.setId("-1"+code); // Payment transaction issue
             return order;
         }
+        // else{
+        //     String message = "This is to confirm we have received payment for your order. Your order will be processed shortly.";
+        //     if (!StringUtils.isNullOrEmpty(customer.getEmail())) {
+        //         notifications.sendEmailNotification(customer.getEmail(), message);
+        //     }
+        //     notifications.sendSMSNotification(customer.getMobile(), message);
+        // }
 
         // Update the transaction status
         String newStatus = pgiService.getId().equalsIgnoreCase("cod") ? "'Pending'" : "'Success'";
@@ -207,19 +227,19 @@ public class OrderService {
         // 6. Change status of cart items in db to 'executed'
 
         log.info("Beginning to create an order for customer - "+orderContext.getCustomerId());
-        CustomerRunnerUtil.validateAndGetAuthCustomer(auth, orderContext.getCustomerId());
         Order preOrder = this.createPreOrder(orderContext, true, auth);
 
         int osid = jdbcTemplateObject.queryForObject("select osid from item_order_status where name='Initial'", Integer.TYPE);
 
         SimpleJdbcInsert jdbcInsert_Order = new SimpleJdbcInsert(jdbcTemplateObject)
-                                            .usingColumns("cuid", "said", "taxproid", "tax_percent", "shipping_cost", "tax_type", "price", "discounted_price", "pcid", "osid")
+                                            .usingColumns("cuid", "said", "baid", "taxproid", "tax_percent", "shipping_cost", "tax_type", "price", "discounted_price", "pcid", "osid")
                                             .withTableName("item_order")
                                             .usingGeneratedKeyColumns("oid");
 
         Map<String, Object> parameters_insert_order = new HashMap<String, Object>(1);
         parameters_insert_order.put("cuid", orderContext.getCustomerId());
         parameters_insert_order.put("said", preOrder.getShippingAddressId());
+        parameters_insert_order.put("baid", preOrder.getBillingAddressId());
         parameters_insert_order.put("taxproid", preOrder.getTaxProfileId());
         parameters_insert_order.put("tax_percent", preOrder.getTotalTaxRate());
         parameters_insert_order.put("tax_type", preOrder.getTaxType());        
@@ -261,7 +281,7 @@ public class OrderService {
         SimpleJdbcInsert jdbcInsert_shipping_address = new SimpleJdbcInsert(jdbcTemplateObject)
                                                         .usingColumns("oid", "shipping_first_name", "shipping_last_name", "shipping_line1", "shipping_line2",
                                                                     "shipping_city", "shipping_stid", "shipping_zip_code", "shipping_mobile", "billing_first_name", "billing_last_name",
-                                                                    "billing_line1", "billing_line2", "billing_city", "billing_stid", "billing_zip_code")
+                                                                    "billing_line1", "billing_line2", "billing_city", "billing_stid", "billing_zip_code", "billing_mobile")
                                                         .withTableName("item_order_shipping_address");
 
         Map<String, Object> parameters_insert_shipping_address = new HashMap<String, Object>(1);
@@ -274,13 +294,14 @@ public class OrderService {
         parameters_insert_shipping_address.put("shipping_stid", order.getShippingAddress().getStateId());
         parameters_insert_shipping_address.put("shipping_zip_code", order.getShippingAddress().getZipcode());
         parameters_insert_shipping_address.put("shipping_mobile", order.getShippingAddress().getPhoneNumber());
-        parameters_insert_shipping_address.put("billing_first_name", order.getShippingAddress().getFirstName());
-        parameters_insert_shipping_address.put("billing_last_name", order.getShippingAddress().getLastName());
-        parameters_insert_shipping_address.put("billing_line1", order.getShippingAddress().getLine1());
-        parameters_insert_shipping_address.put("billing_line2", order.getShippingAddress().getLine2());
-        parameters_insert_shipping_address.put("billing_city", order.getShippingAddress().getCity());
-        parameters_insert_shipping_address.put("billing_stid", order.getShippingAddress().getStateId());
-        parameters_insert_shipping_address.put("billing_zip_code", order.getShippingAddress().getZipcode());
+        parameters_insert_shipping_address.put("billing_first_name", order.getBillingAddress().getFirstName());
+        parameters_insert_shipping_address.put("billing_last_name", order.getBillingAddress().getLastName());
+        parameters_insert_shipping_address.put("billing_line1", order.getBillingAddress().getLine1());
+        parameters_insert_shipping_address.put("billing_line2", order.getBillingAddress().getLine2());
+        parameters_insert_shipping_address.put("billing_city", order.getBillingAddress().getCity());
+        parameters_insert_shipping_address.put("billing_stid", order.getBillingAddress().getStateId());
+        parameters_insert_shipping_address.put("billing_zip_code", order.getBillingAddress().getZipcode());
+        parameters_insert_shipping_address.put("billing_mobile", order.getBillingAddress().getPhoneNumber());
 
         jdbcInsert_shipping_address.execute(parameters_insert_shipping_address);
 
@@ -313,6 +334,12 @@ public class OrderService {
         jdbcTemplateObject.update(update_cart_items_to_executed, orderContext.getCustomerId());
         log.debug("New order created - {} ",order.toString());
         log.info("Order "+oid+" created for customer - "+order.getCustomerId());
+        
+        // String message = "Thank you for placing order with us. Your order id is "+order.getId()+". Your order will be processed shortly!";
+        // if (!StringUtils.isNullOrEmpty(customer.getEmail())) {
+        //     notifications.sendEmailNotification(customer.getEmail(), message);
+        // }
+        // notifications.sendSMSNotification(customer.getMobile(), message);
         return order;
     }
 
@@ -404,10 +431,29 @@ public class OrderService {
             sa.add(selfLink);
             return sa;
         });
-        Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).createPreOrder(context, false, auth)).withSelfRel();
-        order.add(selfLink);
+
         order.setShippingAddress(deliveryAddress);
         order.setShippingAddressId(context.getDeliveryAddressId());
+
+        //Get billing address
+        String get_billing_address_sql = "select sa.said, sa.first_name, sa.last_name, sa.line1, sa.line2, sa.zip_code, sa.mobile, sa.city, sa.stid, state.state "+
+                                            "from customer_shipping_address sa, state where sa.said = ? and sa.stid = state.stid";
+                                            
+        ShippingAddress billingAddress = jdbcTemplateObject.queryForObject(get_billing_address_sql, new Object[]{context.getBillingAddressId()}, (rs, rowNum) -> {
+            ShippingAddress sa = new ShippingAddress(rs.getString("line1"), rs.getString("city"), rs.getString("zip_code"), rs.getString("mobile"));
+            sa.setId(String.valueOf(rs.getInt("said")));
+            sa.setLine2(rs.getString("line2"));
+            sa.setFirstName(rs.getString("first_name"));
+            sa.setLastName(rs.getString("last_name"));
+            sa.setState(rs.getString("state"));
+            sa.setStateId(rs.getInt("stid"));
+            Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).createPreOrder(context, false, auth)).withSelfRel();
+            sa.add(selfLink);
+            return sa;
+        });
+
+        order.setBillingAddress(billingAddress);
+        order.setBillingAddressId(context.getBillingAddressId());
 
         //Start a payment transaction protocol if a paymentOptionId is available in OrderContext
         // if (StringUtils.isNullOrEmpty(context.getTransactionId()) && 
@@ -460,6 +506,8 @@ public class OrderService {
 
         //     order.setTransaction(transaction);
         // }
+        Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).createPreOrder(context, false, auth)).withSelfRel();
+        order.add(selfLink);
         return order;
     }
 

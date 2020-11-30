@@ -16,10 +16,13 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Component;
 
+import lombok.extern.slf4j.Slf4j;
+
 import com.dolittle.ecom.customer.bo.Customer;
 import com.dolittle.ecom.runner.Runner;
 
 @Component
+@Slf4j
 public class AppUserDetailsService implements UserDetailsService {
 
     @Autowired
@@ -90,6 +93,7 @@ public class AppUserDetailsService implements UserDetailsService {
                 });
             }
             catch(EmptyResultDataAccessException e) {
+                log.error("Invalid Username/Password");
                 throw new BadCredentialsException("Invalid Username/Password");
             }
         }
@@ -117,6 +121,7 @@ public class AppUserDetailsService implements UserDetailsService {
                 });
             }
             catch(EmptyResultDataAccessException e) {
+                log.error("Invalid Username/Password");
                 throw new BadCredentialsException("Invalid Username/Password");
             }
         }

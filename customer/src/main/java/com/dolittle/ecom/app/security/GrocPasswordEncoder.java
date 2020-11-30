@@ -4,13 +4,15 @@ import static org.apache.commons.codec.digest.MessageDigestAlgorithms.MD5;
 import static org.apache.commons.codec.digest.MessageDigestAlgorithms.SHA_1;
 
 import org.apache.commons.codec.digest.DigestUtils;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
 @Component
 public class GrocPasswordEncoder implements PasswordEncoder {
 
-    private String PASSWORD_SALT = "K<47`5n9~8H5`*^Ks.>ie5&";
+    @Value("${passwordsalt}")
+    private String PASSWORD_SALT;
 
     @Override
     public String encode(CharSequence rawPassword) {

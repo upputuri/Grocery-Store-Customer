@@ -13,6 +13,7 @@ import com.dolittle.ecom.app.bo.Subscriptions;
 import com.dolittle.ecom.app.bo.Variables;
 import com.dolittle.ecom.app.security.GrocPasswordEncoder;
 import com.dolittle.ecom.app.security.bo.OTPRequest;
+import com.dolittle.ecom.app.sms.SMSServiceProvider;
 import com.dolittle.ecom.app.util.CustomerRunnerUtil;
 import com.dolittle.ecom.customer.bo.general.PaymentOption;
 import com.dolittle.ecom.customer.bo.general.PromoCode;
@@ -64,6 +65,9 @@ public class CustomerRunner implements CommandLineRunner{
 	
 	@Autowired
 	private JavaMailSender mailSender;
+
+	@Autowired
+	private SMSServiceProvider smsSender;
 	
 	@Autowired
 	private PasswordEncoder passwordEncoder;
@@ -235,7 +239,17 @@ public class CustomerRunner implements CommandLineRunner{
             message.setText(otpRequest.getMessage().replace("{}", otpRequest.getOtp()));
 			mailSender.send(message);
 			log.info("OTP sent to requested target");
-        }
+		}
+		else if (otpRequest.getType().equals("mobile"))
+		{
+			int code = smsSender.sendOTP(otpRequest.getTarget(), otpRequest.getMessage().replace("{}", otpRequest.getOtp()));
+			if (code == 0){
+				log.info("OTP dispatched to SMS service successfully!");
+			}
+			else{
+				log.error("Dispatching OTP to SMS service failed. Please check SMS service logs for service specific error codes");
+			}
+		}
 	}
 	
 	@Data class CoverImage extends RepresentationModel<CoverImage>{
