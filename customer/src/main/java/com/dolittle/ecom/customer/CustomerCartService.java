@@ -54,7 +54,7 @@ public class CustomerCartService
             "inventory_set as ins, inventory_set_variations as insv, "+
             "(select iid, title, image from item_item_photo group by iid) as iip "+
             "where c.cuid = ? and c.cartid = ci.cartid and iip.iid = ii.iid and ci.iid = ii.iid and ci.cartisid = cis.cartisid and ins.isvid = ci.isvid and insv.isvid = ci.isvid "+
-            "and cis.name = 'Active'";
+            "and ins.issid = '1' AND ins.istid='1' AND insv.isvsid = '1' and cis.name = 'Active'";
 
             List<CartItem> cartItems = jdbcTemplateObject.query( sql, new Object[]{customer.getId()} , (rs, rowNumber) -> {
                 CartItem ci = new CartItem(String.valueOf(rs.getInt("iid")), String.valueOf(rs.getInt("isvid")));
