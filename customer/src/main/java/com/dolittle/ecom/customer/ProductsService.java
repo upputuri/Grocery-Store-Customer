@@ -176,9 +176,10 @@ public class ProductsService{
                 productIdCsv += (productIdCsv.equals("")?"":",")+prod.getId();
             }
 
-            String fetch_variations_sql = "SELECT i.iid, lis.price, lis.mrp, offers.discount as offer_discount, lis.description, lis.isvid, lis.name, (CASE WHEN lis.quantity IS NULL THEN 0 ELSE lis.quantity END) as quantity, (CASE WHEN ois.ordered IS NULL THEN 0 ELSE ois.ordered END) as ordered "+
-                                            "FROM item_item i INNER JOIN ( SELECT * FROM ( SELECT *, SUM(quantity1) as quantity FROM ( SELECT iss.iid,iss.isvid,iss.price,iss.mrp,isv.name,isv.description,count(isi.isiid) as quantity1 FROM inventory_set iss "+
-                                            "LEFT JOIN (select * from inventory_set_item isi_a where isi_a.isisid='1') as isi ON (iss.isid = isi.isid) INNER JOIN inventory_set_variations isv ON (iss.isvid = isv.isvid) WHERE iss.issid = '1' AND iss.istid='1' AND isv.isvsid = '1' "+
+            String fetch_variations_sql = "SELECT i.iid, lis.price, lis.mrp, lis.imagefiles, offers.discount as offer_discount, lis.description, lis.isvid, lis.name, (CASE WHEN lis.quantity IS NULL THEN 0 ELSE lis.quantity END) as quantity, (CASE WHEN ois.ordered IS NULL THEN 0 ELSE ois.ordered END) as ordered "+
+                                            "FROM item_item i INNER JOIN ( SELECT * FROM ( SELECT *, SUM(quantity1) as quantity FROM ( SELECT iss.iid,iss.isvid,iss.price,iss.mrp,isv.name,isv.description,count(isi.isiid) as quantity1, imagefiles FROM inventory_set iss "+
+                                            "LEFT JOIN (select * from inventory_set_item isi_a where isi_a.isisid='1') as isi ON (iss.isid = isi.isid) INNER JOIN inventory_set_variations isv ON (iss.isvid = isv.isvid) LEFT JOIN (select isvid, GROUP_CONCAT(image separator ',') as imagefiles from inventory_set_variations_photos group by isvid) as isvp ON (iss.isvid = isvp.isvid) "+
+                                            "WHERE iss.issid = '1' AND iss.istid='1' AND isv.isvsid = '1' "+
                                             "GROUP By iss.isid ORDER BY price DESC ) as x GROUP BY x.isvid ORDER BY x.price DESC ) as y ORDER BY y.price DESC ) as lis ON (i.iid = lis.iid) LEFT JOIN "+
                                             "( SELECT (CASE WHEN ioie.exe_o IS NULL THEN SUM(ioi.quantity) ELSE SUM(ioi.quantity) - SUM(ioie.exe_o) END) as ordered, ioi.isvid FROM item_order_item as ioi LEFT JOIN item_order io ON "+
                                             "(ioi.oid = io.oid) LEFT JOIN ( SELECT count(exe_ioie.oiid) as exe_o, exe_ioie.oiid from item_order_item_execution exe_ioie GROUP BY exe_ioie.oiid ) as ioie ON ioie.oiid = ioi.oiid "+
@@ -201,6 +202,8 @@ public class ProductsService{
                 isv.setProductId(String.valueOf(rs.getInt("iid")));
                 isv.setAvailableQty(rs.getInt("quantity"));
                 isv.setOrderedQty((rs.getInt("ordered")));
+                String imagefiles = rs.getString("imagefiles");
+                isv.setImages(imagefiles != null ? imagefiles.split(",") : new String[0]);
                 return isv;
             });
             
@@ -329,9 +332,10 @@ public class ProductsService{
                     p.add(selfLink);               
                     return p;
             });
-            String fetch_variations_sql = "SELECT i.iid, lis.price, lis.mrp, offers.discount as offer_discount, lis.description, lis.isvid, lis.name, (CASE WHEN lis.quantity IS NULL THEN 0 ELSE lis.quantity END) as quantity, (CASE WHEN ois.ordered IS NULL THEN 0 ELSE ois.ordered END) as ordered "+
-                                            "FROM item_item i INNER JOIN ( SELECT * FROM ( SELECT *, SUM(quantity1) as quantity FROM ( SELECT iss.iid,iss.isvid,iss.price,iss.mrp,isv.name,isv.description,count(isi.isiid) as quantity1 FROM inventory_set iss "+
-                                            "LEFT JOIN (select * from inventory_set_item isi_a where isi_a.isisid='1') as isi ON (iss.isid = isi.isid) INNER JOIN inventory_set_variations isv ON (iss.isvid = isv.isvid) WHERE iss.issid = '1' AND iss.istid='1' AND isv.isvsid = '1' "+
+            String fetch_variations_sql = "SELECT i.iid, lis.imagefiles, lis.price, lis.mrp, offers.discount as offer_discount, lis.description, lis.isvid, lis.name, (CASE WHEN lis.quantity IS NULL THEN 0 ELSE lis.quantity END) as quantity, (CASE WHEN ois.ordered IS NULL THEN 0 ELSE ois.ordered END) as ordered "+
+                                            "FROM item_item i INNER JOIN ( SELECT * FROM ( SELECT *, SUM(quantity1) as quantity FROM ( SELECT iss.iid,iss.isvid,iss.price,iss.mrp,isv.name,isv.description,count(isi.isiid) as quantity1, imagefiles FROM inventory_set iss "+
+                                            "LEFT JOIN (select * from inventory_set_item isi_a where isi_a.isisid='1') as isi ON (iss.isid = isi.isid) INNER JOIN inventory_set_variations isv ON (iss.isvid = isv.isvid) LEFT JOIN (select isvid, GROUP_CONCAT(image separator ',') as imagefiles from inventory_set_variations_photos group by isvid) as isvp ON (iss.isvid = isvp.isvid) "+
+                                            "WHERE iss.issid = '1' AND iss.istid='1' AND isv.isvsid = '1' "+
                                             "GROUP By iss.isid ORDER BY price DESC ) as x GROUP BY x.isvid ORDER BY x.price DESC ) as y ORDER BY y.price DESC ) as lis ON (i.iid = lis.iid) LEFT JOIN "+
                                             "( SELECT (CASE WHEN ioie.exe_o IS NULL THEN SUM(ioi.quantity) ELSE SUM(ioi.quantity) - SUM(ioie.exe_o) END) as ordered, ioi.isvid FROM item_order_item as ioi LEFT JOIN item_order io ON "+
                                             "(ioi.oid = io.oid) LEFT JOIN ( SELECT count(exe_ioie.oiid) as exe_o, exe_ioie.oiid from item_order_item_execution exe_ioie GROUP BY exe_ioie.oiid ) as ioie ON ioie.oiid = ioi.oiid "+
@@ -353,6 +357,8 @@ public class ProductsService{
                 isv.setProductId(String.valueOf(rs.getInt("iid")));
                 isv.setAvailableQty(rs.getInt("quantity"));
                 isv.setOrderedQty((rs.getInt("ordered")));
+                String imagefiles = rs.getString("imagefiles");
+                isv.setImages(imagefiles != null ? imagefiles.split(",") : new String[0]);
                 return isv;
             });
             product.setVariations(variations);

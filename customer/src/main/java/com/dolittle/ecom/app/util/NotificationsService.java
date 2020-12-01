@@ -46,7 +46,6 @@ public class NotificationsService {
     }
 
     private void sendEmailNotification(String emailTo, String subject, String message){
-        //Send email OTP to customer
         try{
             SimpleMailMessage eMailMessage = new SimpleMailMessage(); 
             eMailMessage.setFrom(emailFrom);
@@ -63,10 +62,10 @@ public class NotificationsService {
             eMailMessage.setSubject(subject); 
             eMailMessage.setText(message);
             mailSender.send(eMailMessage);
-            log.info("OTP sent to requested target email");
+            log.info("Notification sent to requested target email");
         }
         catch(Exception e) {
-            log.error("An error occured while sending SMS notification", e);
+            log.error("An error occured while sending email notification", e);
         }
     }
 
