@@ -399,7 +399,7 @@ public class CustomerRunner implements CommandLineRunner{
 		log.info("Processing request to get values of variables: "+keyCsv);
 		keyCsv = Arrays.stream(keyCsv.split(",")).map(key -> "'"+key+"'").collect(Collectors.joining(","));
 		String fetch_variables_query = "select vid, value from variable where vid in ("+keyCsv+")";
-		Map<String, String> vars = new HashMap<String, String>(1);
+		Map<String, Object> vars = new HashMap<String, Object>(1);
 		jdbcTemplate.query(fetch_variables_query, new Object[]{}, (rs, rowNum) -> {
 			String vid = rs.getString("vid");
 			String value = rs.getString("value");

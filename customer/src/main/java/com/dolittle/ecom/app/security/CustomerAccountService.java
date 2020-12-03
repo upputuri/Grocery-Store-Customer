@@ -43,7 +43,7 @@ public class CustomerAccountService {
         Customer customer = CustomerRunnerUtil.fetchAuthCustomer(auth);
         AppUser user = (AppUser)auth.getPrincipal();
         
-        String get_cart_count_sql = "select COALESCE(sum(quantity),0) from cart_item where cartid=(select cartid from cart where cuid=?) "+
+        String get_cart_count_sql = "select count(*) from cart_item where cartid=(select cartid from cart where cuid=?) "+
         "and cartisid=(select cartisid from cart_item_status where name='Active')";
         int cartItemCount = jdbcTemplateObject.queryForObject(get_cart_count_sql, new Object[]{customer.getId()}, Integer.TYPE);
         // TODO: Implement token/sessionid to avoid sending password each time.  
