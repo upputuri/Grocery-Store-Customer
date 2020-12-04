@@ -4,15 +4,23 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.function.BinaryOperator;
+import java.util.stream.Collectors;
 
+import com.dolittle.ecom.app.CustomerConfig;
+import com.dolittle.ecom.app.bo.Variables;
 import com.dolittle.ecom.customer.bo.Category;
 import com.dolittle.ecom.customer.bo.InventorySetVariation;
 import com.dolittle.ecom.customer.bo.Product;
 import com.dolittle.ecom.customer.bo.ProductsPage;
 
+import org.apache.commons.lang3.StringUtils;
+import org.json.JSONArray;
+import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.EmptyResultDataAccessException;
@@ -23,6 +31,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
@@ -35,6 +45,9 @@ public class ProductsService{
     
 	@Autowired
     JdbcTemplate jdbcTemplateObject;
+
+    @Autowired
+    CustomerConfig config;
 
     @GetMapping(value = "/products/categories/{id}", produces = "application/hal+json")
     public Category getCategoryDetail()
@@ -73,16 +86,18 @@ public class ProductsService{
 		return result;
     }
 
-    @GetMapping(value = "/products", produces = "application/hal+json")
+    @PostMapping(value = "/products", produces = "application/hal+json")
     public ProductsPage getProducts(@RequestParam(value = "category", required=false, defaultValue = "") String categoryId,
                                                 @RequestParam(value = "sortkey", required=false, defaultValue = "item_name") String sortKey,
                                                 @RequestParam(value = "sortorder", required=false, defaultValue = "asc") String sortOrder, 
                                                 @RequestParam(value = "keywords", required=false, defaultValue = "") String keywords,
                                                 @RequestParam(value = "offset", required=false, defaultValue = "0") int pageOffset, 
-                                                @RequestParam(value = "size", required=false, defaultValue = "15") int pageSize)
+                                                @RequestParam(value = "size", required=false, defaultValue = "15") int pageSize,
+                                                @RequestBody(required=false) String filterString)
     {
 
         List<Product> prods = new ArrayList<Product>();
+        Map<String, String[]> filterOptions = new HashMap<String, String[]>(0);
         int totalCount = 0;
         try{
             String limit_sql = " limit ?, ? ";
@@ -91,6 +106,40 @@ public class ProductsService{
             String keyword_filter_sql = keywords.length() > 0 ? " and match (i.name, i.description, i.keywords) against (? IN BOOLEAN MODE) ":"";
             String orderby_sql = "";
             String iid_filter_sql = "";
+
+            String attribute_name_filter_sql = "(";//"(ia.name = 'Weight' or ia.name = 'Volume' or ia.name = 'Color')";
+            String[] parts = config.getProductFilters().split(",");
+            if (parts.length > 0) {
+                for(String part : parts){
+                    attribute_name_filter_sql += " ia.name = '"+part+"' or";
+                }
+                attribute_name_filter_sql = StringUtils.removeEnd(attribute_name_filter_sql, "or")+")";
+            }
+
+            String filterOptions_filter_sql = "";
+            String col_prefix = " products.attributes ";
+            if (filterString != null && filterString.length() > 0){
+                JSONObject filters = new JSONObject(filterString);
+                for (String filterType : config.getProductFilters().split(",")){
+                    if (filters.has(filterType)){
+                        JSONArray values = filters.getJSONArray(filterType);
+                        Iterator<Object> itr = values.iterator();
+                        filterOptions_filter_sql += " (";
+                        while (itr.hasNext()){
+                            String matcher = "'%"+filterType+"#"+(String)itr.next()+"%'";
+                            filterOptions_filter_sql += col_prefix + " like " + matcher + " or";
+                        }
+                        filterOptions_filter_sql = StringUtils.removeEndIgnoreCase(filterOptions_filter_sql, "or");
+                        filterOptions_filter_sql += ") and";
+                    }
+                }
+                filterOptions_filter_sql = StringUtils.removeEndIgnoreCase(filterOptions_filter_sql, "and");
+            }
+
+            if (filterOptions_filter_sql.length() > 0 ){
+                filterOptions_filter_sql = " where ("+filterOptions_filter_sql+") ";
+            }
+
             if (sortKey.equalsIgnoreCase("sales")) {
                 String items_by_sales_sql = "select GROUP_CONCAT(q.iid) from (SELECT ioi.iid FROM item_order_item ioi INNER JOIN item_item ii ON ioi.iid = ii.iid "+
                                             "WHERE ii.istatusid = 1 GROUP BY ioi.iid ORDER BY COUNT( ioi.iid ) "+
@@ -115,16 +164,19 @@ public class ProductsService{
             
             orderby_sql += keywords.length() > 0 ? " ,score desc ":"";
 
-
-            String products_fetch_sql = "select i.iid, i.created_ts as created_ts, i.name as item_name, i.description, i.price, i.item_discount, p.imagefiles, "+
+            String products_page_fetch_sql = "select * from (select i.iid, GROUP_CONCAT(concat(ia.name,'#',iav.value) SEPARATOR ',') as attributes, i.created_ts as created_ts, i.name as item_name, i.description, i.price, i.item_discount, p.imagefiles, "+
             "offers.discount as offer_discount, offers.amount as offer_amount "+score_col_sql+
-            "from item_item as i left join (select oi.iid, discount, amount from offer_item oi, offer where offer.offid=oi.offid and offer.offsid= "+
+            "from item_gi igi inner join item_item i on (i.giid=igi.giid) "+
+            "left join item_gi_attribute igia on (igi.giid = igia.giid) "+
+            "inner join item_attribute ia on (igia.aid=ia.aid and "+attribute_name_filter_sql+") "+
+                                                                  "left join item_attribute_group iag on (ia.agid=iag.agid) "+
+            "inner join item_attribute_value iav on (iav.aid=ia.aid) "+
+            "left join (select oi.iid, discount, amount from offer_item oi, offer where offer.offid=oi.offid and offer.offsid= "+
             "(select offsid from offer_status where name='Active')) as offers on (i.iid=offers.iid) "+
             "left join (select iid, title, GROUP_CONCAT(image separator ',') as imagefiles from item_item_photo group by iid) as p on (i.iid=p.iid), "+
             "item_item_status as s, item_gi_category as ic, category as c "+
             "where s.istatusid = i.istatusid and s.name = 'Active' and ic.giid = i.giid and c.catid = ic.catid "+
-            iid_filter_sql+category_filter_sql+keyword_filter_sql+" group by i.iid order by "+orderby_sql+limit_sql
-            ;
+            iid_filter_sql+category_filter_sql+keyword_filter_sql+" group by i.iid "+" order by "+orderby_sql+") as products "+ filterOptions_filter_sql +limit_sql;
 
             List<Object> params = new ArrayList<Object>(1);
             if (keywords.length() > 0) {
@@ -143,7 +195,7 @@ public class ProductsService{
             params.add(pageSize);
 
             prods = jdbcTemplateObject.query(
-               products_fetch_sql, params.toArray(), (rs, rowNumber) -> {
+               products_page_fetch_sql, params.toArray(), (rs, rowNumber) -> {
                     Product p = new Product(String.valueOf(rs.getInt("iid")), rs.getString("item_name"), rs.getBigDecimal("price"));
                     BigDecimal offerDiscount = rs.getBigDecimal("offer_discount");
                     // BigDecimal variationPrice = rs.getBigDecimal("variation_price");
@@ -158,6 +210,7 @@ public class ProductsService{
                     p.setImages(images);
                     p.setInStock(true);
                     p.setDescription(rs.getString("description"));
+                    p.setAttr(rs.getString("attributes"));
                     // InventorySetVariation variation = new InventorySetVariation(String.valueOf(rs.getInt("variation_id")), 
                     //                                             rs.getString("variation_name"), variationPrice, rs.getBigDecimal("variation_mrp"));
                     // variation.setDescription(rs.getString("variation_desc"));
@@ -171,6 +224,31 @@ public class ProductsService{
                }               
             );
             
+            //Removing the limit, offset params
+            params.remove(params.size()-1);
+            params.remove(params.size()-1);
+            
+            //Fetch filters suitable for current search result, only if current search is not a filtered search.
+
+            String fetch_attribute_filters_sql = "select ia.name, GROUP_CONCAT(iav.value SEPARATOR ',') as filter_values "+score_col_sql+
+                                                    "from item_gi igi inner join item_item i on (i.giid=igi.giid) "+
+                                                    "left join item_gi_attribute igia on (igi.giid = igia.giid) "+
+                                                    "inner join item_attribute ia on (igia.aid=ia.aid and "+attribute_name_filter_sql+") "+
+                                                    "                                                        left join item_attribute_group iag on (ia.agid=iag.agid) "+
+                                                    "                                                        inner join item_attribute_value iav on (iav.aid=ia.aid), "+
+                                                    "item_item_status as s, item_gi_category as ic, category as c "+
+                                                    "where s.istatusid = i.istatusid and s.name = 'Active' and ic.giid = i.giid and c.catid = ic.catid "+
+                                                    iid_filter_sql+category_filter_sql+keyword_filter_sql+" group by ia.name";
+
+
+            jdbcTemplateObject.query(fetch_attribute_filters_sql, params.toArray(), (rs, rowNum)->{
+                if (rs.getString("filter_values") != null && rs.getString("filter_values").length() > 0){
+                    filterOptions.put(rs.getString("name"), rs.getString("filter_values").split(","));
+                }
+                return null;
+            });
+
+
             String productIdCsv = "";
             for (Product prod : prods) {
                 productIdCsv += (productIdCsv.equals("")?"":",")+prod.getId();
@@ -221,11 +299,10 @@ public class ProductsService{
                 p.setVariations(prod_variations == null ? new ArrayList<InventorySetVariation>() : prod_variations);
             }
             
-            //Removing the limit, offset params
-            params.remove(params.size()-1);
-            params.remove(params.size()-1);
-            String total_count_query = "select count(*) from ("+products_fetch_sql.substring(0, products_fetch_sql.indexOf(limit_sql))+") as products";
+
+            String total_count_query = "select count(*) from ("+products_page_fetch_sql.substring(0, products_page_fetch_sql.indexOf(limit_sql))+") as products";
             totalCount = jdbcTemplateObject.queryForObject(total_count_query, params.toArray(), Integer.TYPE);
+
 
        }
        catch(DataAccessException e)
@@ -238,7 +315,8 @@ public class ProductsService{
        page.setSize(prods.size());
        page.setTotalCount(totalCount);
        page.setProducts(prods);
-       Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getProducts(categoryId,"","","", 0, 1000000)).withSelfRel();
+       page.setFilterOptions(filterOptions);
+       Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getProducts(categoryId,"","","", 0, 1000000,null)).withSelfRel();
        page.add(selfLink);
        return page;
     }

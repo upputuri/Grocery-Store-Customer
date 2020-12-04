@@ -419,7 +419,7 @@ public class CustomerRunner implements CommandLineRunner{
 		log.info("Processing request to get values of social media handles: ");
 		String fetch_variables_query = "select swl.name, swd.url from social_widget_list swl, social_widget_list_status swls, social_widget_details swd, social_widget_details_status swds "+
 										"where swl.swlid = swd.swlid and swds.swdsid = swd.swdsid and swls.name='Active' and swds.name='Active' ORDER BY swdid ASC";
-		Map<String, String> vars = new HashMap<String, String>(1);
+		Map<String, Object> vars = new HashMap<String, Object>(1);
 		jdbcTemplate.query(fetch_variables_query, new Object[]{}, (rs, rowNum) -> {
 			String name = rs.getString("name");
 			String url = rs.getString("url");

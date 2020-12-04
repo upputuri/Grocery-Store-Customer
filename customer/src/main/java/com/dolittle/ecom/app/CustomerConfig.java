@@ -11,4 +11,5 @@ import lombok.Data;
 @ConfigurationProperties(prefix = "customer")
 public @Data class CustomerConfig {
     private Map<String, String> pgiProviders;
+    private String productFilters;
 }
