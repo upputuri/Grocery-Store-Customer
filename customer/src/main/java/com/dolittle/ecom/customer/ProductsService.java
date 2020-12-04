@@ -230,7 +230,7 @@ public class ProductsService{
             
             //Fetch filters suitable for current search result, only if current search is not a filtered search.
 
-            String fetch_attribute_filters_sql = "select ia.name, GROUP_CONCAT(iav.value SEPARATOR ',') as filter_values "+score_col_sql+
+            String fetch_attribute_filters_sql = "select ia.name, GROUP_CONCAT(distinct iav.value SEPARATOR ',') as filter_values "+score_col_sql+
                                                     "from item_gi igi inner join item_item i on (i.giid=igi.giid) "+
                                                     "left join item_gi_attribute igia on (igi.giid = igia.giid) "+
                                                     "inner join item_attribute ia on (igia.aid=ia.aid and "+attribute_name_filter_sql+") "+
@@ -360,7 +360,7 @@ public class ProductsService{
                                                 "group by i.iid) as att on (att.iid=i.iid), "+
                                                 "item_item_status as s "+
                                                 "where s.name = 'Active' and s.istatusid = i.istatusid and i.iid=? group by i.iid ";
-
+            log.debug(fetch_product_detail_sql);
             Product product = jdbcTemplateObject.queryForObject(fetch_product_detail_sql,
                 new Object[]{productId}, (rs, rowNumber) -> {
                     Product p = new Product(String.valueOf(rs.getInt("iid")), rs.getString("item_name"), rs.getBigDecimal("price"));
