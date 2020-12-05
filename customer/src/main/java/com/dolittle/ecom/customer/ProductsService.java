@@ -88,7 +88,7 @@ public class ProductsService{
 
     @PostMapping(value = "/products", produces = "application/hal+json")
     public ProductsPage getProducts(@RequestParam(value = "category", required=false, defaultValue = "") String categoryId,
-                                                @RequestParam(value = "sortkey", required=false, defaultValue = "item_name") String sortKey,
+                                                @RequestParam(value = "sortkey", required=false, defaultValue = "itemname") String sortKey,
                                                 @RequestParam(value = "sortorder", required=false, defaultValue = "asc") String sortOrder, 
                                                 @RequestParam(value = "keywords", required=false, defaultValue = "") String keywords,
                                                 @RequestParam(value = "offset", required=false, defaultValue = "0") int pageOffset, 
@@ -156,7 +156,7 @@ public class ProductsService{
 
                 // iid_filter_sql = "and i.iid IN ("+items_by_sales_sql+") ";
                 iid_filter_sql = "and i.iid IN ("+itemIdCsv+") ";
-                orderby_sql += "item_name";
+                orderby_sql += "itemname";
             }
             else{
                 orderby_sql += sortKey.length() > 0 ? " "+sortKey+" "+(sortOrder.equalsIgnoreCase("desc") ? "desc":"asc") : "";
@@ -164,9 +164,10 @@ public class ProductsService{
             
             orderby_sql += keywords.length() > 0 ? " ,score desc ":"";
 
-            String products_page_fetch_sql = "select * from (select i.iid, GROUP_CONCAT(concat(ia.name,'#',iav.value) SEPARATOR ',') as attributes, i.created_ts as created_ts, i.name as item_name, i.description, i.price, i.item_discount, p.imagefiles, "+
+            String products_page_fetch_sql = "select *, products.variant_price*(1-COALESCE(offer_discount,0)/100) as itemprice from (select i.iid, ins.price as variant_price, GROUP_CONCAT(concat(ia.name,'#',iav.value) SEPARATOR ',') as attributes, i.created_ts as created_ts, i.name as itemname, i.description, i.price, i.item_discount, p.imagefiles, "+
             "offers.discount as offer_discount, offers.amount as offer_amount "+score_col_sql+
             "from item_gi igi inner join item_item i on (i.giid=igi.giid) "+
+            "inner join inventory_set ins on (i.iid=ins.iid) "+
             "left join item_gi_attribute igia on (igi.giid = igia.giid) "+
             "inner join item_attribute ia on (igia.aid=ia.aid and "+attribute_name_filter_sql+") "+
                                                                   "left join item_attribute_group iag on (ia.agid=iag.agid) "+
@@ -176,7 +177,7 @@ public class ProductsService{
             "left join (select iid, title, GROUP_CONCAT(image separator ',') as imagefiles from item_item_photo group by iid) as p on (i.iid=p.iid), "+
             "item_item_status as s, item_gi_category as ic, category as c "+
             "where s.istatusid = i.istatusid and s.name = 'Active' and ic.giid = i.giid and c.catid = ic.catid "+
-            iid_filter_sql+category_filter_sql+keyword_filter_sql+" group by i.iid "+" order by "+orderby_sql+") as products "+ filterOptions_filter_sql +limit_sql;
+            iid_filter_sql+category_filter_sql+keyword_filter_sql+" group by i.iid "+") as products "+ filterOptions_filter_sql +" order by "+orderby_sql+limit_sql;
 
             List<Object> params = new ArrayList<Object>(1);
             if (keywords.length() > 0) {
@@ -196,7 +197,7 @@ public class ProductsService{
 
             prods = jdbcTemplateObject.query(
                products_page_fetch_sql, params.toArray(), (rs, rowNumber) -> {
-                    Product p = new Product(String.valueOf(rs.getInt("iid")), rs.getString("item_name"), rs.getBigDecimal("price"));
+                    Product p = new Product(String.valueOf(rs.getInt("iid")), rs.getString("itemname"), rs.getBigDecimal("price"));
                     BigDecimal offerDiscount = rs.getBigDecimal("offer_discount");
                     // BigDecimal variationPrice = rs.getBigDecimal("variation_price");
                     // BigDecimal variationPriceAfterDiscount = variationPrice;
