@@ -26,6 +26,7 @@ public @Data class InventorySetVariation extends RepresentationModel<InventorySe
     @JsonProperty(access = Access.READ_ONLY)
     @JsonFormat(shape = JsonFormat.Shape.STRING) 
     private BigDecimal mrp;
+    private String[] images;
     private String description;
 
     public InventorySetVariation(String id, String name, BigDecimal price, BigDecimal mrp)

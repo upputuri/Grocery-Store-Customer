@@ -13,6 +13,7 @@ import com.dolittle.ecom.app.bo.Subscriptions;
 import com.dolittle.ecom.app.bo.Variables;
 import com.dolittle.ecom.app.security.GrocPasswordEncoder;
 import com.dolittle.ecom.app.security.bo.OTPRequest;
+import com.dolittle.ecom.app.sms.SMSServiceProvider;
 import com.dolittle.ecom.app.util.CustomerRunnerUtil;
 import com.dolittle.ecom.customer.bo.general.PaymentOption;
 import com.dolittle.ecom.customer.bo.general.PromoCode;
@@ -52,7 +53,7 @@ import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 
 // @SpringBootApplication
-@ComponentScan("com.dolittle.ecom.customer, com.dolittle.ecom.app")
+@ComponentScan("com.dolittle.ecom.customer, com.dolittle.ecom.runner, com.dolittle.ecom.app")
 @SpringBootApplication(exclude = { SecurityAutoConfiguration.class })
 @RestController
 @Configuration
@@ -64,6 +65,9 @@ public class CustomerRunner implements CommandLineRunner{
 	
 	@Autowired
 	private JavaMailSender mailSender;
+
+	@Autowired
+	private SMSServiceProvider smsSender;
 	
 	@Autowired
 	private PasswordEncoder passwordEncoder;
@@ -235,7 +239,17 @@ public class CustomerRunner implements CommandLineRunner{
             message.setText(otpRequest.getMessage().replace("{}", otpRequest.getOtp()));
 			mailSender.send(message);
 			log.info("OTP sent to requested target");
-        }
+		}
+		else if (otpRequest.getType().equals("mobile"))
+		{
+			int code = smsSender.sendOTP(otpRequest.getTarget(), otpRequest.getMessage().replace("{}", otpRequest.getOtp()));
+			if (code == 0){
+				log.info("OTP dispatched to SMS service successfully!");
+			}
+			else{
+				log.error("Dispatching OTP to SMS service failed. Please check SMS service logs for service specific error codes");
+			}
+		}
 	}
 	
 	@Data class CoverImage extends RepresentationModel<CoverImage>{
@@ -385,7 +399,7 @@ public class CustomerRunner implements CommandLineRunner{
 		log.info("Processing request to get values of variables: "+keyCsv);
 		keyCsv = Arrays.stream(keyCsv.split(",")).map(key -> "'"+key+"'").collect(Collectors.joining(","));
 		String fetch_variables_query = "select vid, value from variable where vid in ("+keyCsv+")";
-		Map<String, String> vars = new HashMap<String, String>(1);
+		Map<String, Object> vars = new HashMap<String, Object>(1);
 		jdbcTemplate.query(fetch_variables_query, new Object[]{}, (rs, rowNum) -> {
 			String vid = rs.getString("vid");
 			String value = rs.getString("value");
@@ -405,7 +419,7 @@ public class CustomerRunner implements CommandLineRunner{
 		log.info("Processing request to get values of social media handles: ");
 		String fetch_variables_query = "select swl.name, swd.url from social_widget_list swl, social_widget_list_status swls, social_widget_details swd, social_widget_details_status swds "+
 										"where swl.swlid = swd.swlid and swds.swdsid = swd.swdsid and swls.name='Active' and swds.name='Active' ORDER BY swdid ASC";
-		Map<String, String> vars = new HashMap<String, String>(1);
+		Map<String, Object> vars = new HashMap<String, Object>(1);
 		jdbcTemplate.query(fetch_variables_query, new Object[]{}, (rs, rowNum) -> {
 			String name = rs.getString("name");
 			String url = rs.getString("url");

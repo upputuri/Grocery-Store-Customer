@@ -51,8 +51,14 @@
                 "dbpassword": "srikanth",
                 "razorpaykey": "rzp_live_TRXw4kJFKuZlop",
                 "razorpaysecret": "HpnnT6H7iJlhIdh6n3WcQ5DG",
-                "emailid": "thevegitclub.com",
-                "emailpassword": "Club@4848"
+                "emailid": "thevegitclub@gmail.com",
+                "emailpassword": "fubdthihvprdtnui",
+                "dolittlesmsapikey": "8cedb40f4f8f102ac6e0e0cae219688b",
+                "dolittlesmsapiurl": "http://smsme.dolittletech.com/api/smsapi",
+                "dolittlesmsapiotproute": "4",
+                "dolittlesmsapinotificationroute": "2",
+                "dolittlesmsapisender": "VEGITC",
+                "passwordsalt": "K<47`5n9~8H5`*^Ks.>ie5&"
             }
         }
     ]

@@ -8,7 +8,6 @@ import com.dolittle.ecom.customer.bo.LoginSession;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mail.SimpleMailMessage;
@@ -24,7 +23,7 @@ import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 @RestController
-public class AccountService {
+public class CustomerAccountService {
     
     @Autowired
     private JdbcTemplate jdbcTemplateObject;
@@ -35,32 +34,35 @@ public class AccountService {
     @Value("${spring.mail.username}")
     private String emailFromAddress;
     
-    @GetMapping(value="/me", produces = "application/hal+json")
+    @GetMapping(value="/customers/me", produces = "application/hal+json")
     public LoginSession getLoginSession(Authentication auth)
     {
         if (auth == null)
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Error during authentication. Please try again or contact support!");
 
         Customer customer = CustomerRunnerUtil.fetchAuthCustomer(auth);
-        String get_cart_count_sql = "select COALESCE(sum(quantity),0) from cart_item where cartid=(select cartid from cart where cuid=?) "+
-                                    "and cartisid=(select cartisid from cart_item_status where name='Active')";
+        AppUser user = (AppUser)auth.getPrincipal();
+        
+        String get_cart_count_sql = "select count(*) from cart_item where cartid=(select cartid from cart where cuid=?) "+
+        "and cartisid=(select cartisid from cart_item_status where name='Active')";
         int cartItemCount = jdbcTemplateObject.queryForObject(get_cart_count_sql, new Object[]{customer.getId()}, Integer.TYPE);
         // TODO: Implement token/sessionid to avoid sending password each time.  
         // //A customer object is available
         // String update_old_sessions_sql = "update auser_session set ussid=2 where uid=?";
         // jdbcTemplateObject.update(update_old_sessions_sql, new Object[]{customer.getUid()}); 
-
+        
         // //Generate a session id
         // String newSessionId = UUID.randomUUID().toString();
         // String clientIp = "";
         // String create_new_session_sql = "insert auser_session (uid, sid, ipaddress, ussid) values (?,?,?,1)";
         // jdbcTemplateObject.update(create_new_session_sql, new Object[]{customer.getUid(), newSessionId, clientIp});
-
+        log.info("User with username "+user.getUsername()+" authenticated successfully. Returning user profile and session data.");
+        
         LoginSession loginSession = new LoginSession(null, customer, cartItemCount);
         return loginSession;
     }
 
-    @PostMapping(value = "/me/otptokens")
+    @PostMapping(value = "/customers/me/otptokens")
     public void sendOTP(@RequestBody OTPRequest otpRequest, Authentication auth)
     {
         log.info("Processing send OTP request");

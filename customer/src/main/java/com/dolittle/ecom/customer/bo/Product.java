@@ -29,6 +29,7 @@ public @Data class Product extends RepresentationModel<Product>{
     private BigDecimal discount;
     private String description;
     private boolean isInStock;
+    private String attr;
     private List<InventorySetVariation> variations = new ArrayList<InventorySetVariation>();
     private Map<String, Properties> attributes = new HashMap<String, Properties>();
 

@@ -5,8 +5,11 @@ import java.math.RoundingMode;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
+import com.dolittle.ecom.app.bo.Variables;
 import com.dolittle.ecom.app.util.CustomerRunnerUtil;
 import com.dolittle.ecom.customer.bo.Cart;
 import com.dolittle.ecom.customer.bo.CartItem;
@@ -23,6 +26,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.security.core.Authentication;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -40,7 +44,7 @@ public class CustomerCartService
     @Autowired
     JdbcTemplate jdbcTemplateObject;
 
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRED)
     @GetMapping(value="/customers/{id}/cart/items", produces="application/hal+json")
     public CollectionModel<CartItem> getCartItems(@PathVariable(value="id", required = true) String customerId, Authentication auth)
     {
@@ -54,7 +58,7 @@ public class CustomerCartService
             "inventory_set as ins, inventory_set_variations as insv, "+
             "(select iid, title, image from item_item_photo group by iid) as iip "+
             "where c.cuid = ? and c.cartid = ci.cartid and iip.iid = ii.iid and ci.iid = ii.iid and ci.cartisid = cis.cartisid and ins.isvid = ci.isvid and insv.isvid = ci.isvid "+
-            "and cis.name = 'Active'";
+            "and ins.issid = '1' AND ins.istid='1' AND insv.isvsid = '1' and cis.name = 'Active'";
 
             List<CartItem> cartItems = jdbcTemplateObject.query( sql, new Object[]{customer.getId()} , (rs, rowNumber) -> {
                 CartItem ci = new CartItem(String.valueOf(rs.getInt("iid")), String.valueOf(rs.getInt("isvid")));
@@ -98,6 +102,7 @@ public class CustomerCartService
         }        
     }
     
+    @Transactional(propagation = Propagation.REQUIRED)
     @GetMapping(value="/customers/{id}/cart", produces="application/hal+json")
     public Cart getCart(@PathVariable(value="id", required = true) String customerId, Authentication auth)
     {
@@ -113,7 +118,7 @@ public class CustomerCartService
     //This can very well be made a void function. Returning a cartitem may not be necessary.
     @Transactional
     @PostMapping(value = "/customers/{customerId}/cart" , produces = "application/hal+json")
-    public CartItem addOrUpdateItemToCart(@PathVariable(value="customerId", required = true) String customerId, @RequestBody CartItem cartItem, Authentication auth)
+    public Variables addOrUpdateItemToCart(@PathVariable(value="customerId", required = true) String customerId, @RequestBody CartItem cartItem, Authentication auth)
     {
         // If user doesn't have a cart yet, create a cart?
         // Receives - productId, is_variation, qty
@@ -134,8 +139,7 @@ public class CustomerCartService
                 {
                     //TODO: Exception. Internal server error.
                 }
-                cartItem.setCartItemId(cartiid.toString());
-                return cartItem;                            
+                cartItem.setCartItemId(cartiid.toString());                           
             }
             catch(EmptyResultDataAccessException e)
             {
@@ -153,16 +157,25 @@ public class CustomerCartService
                         return ps;
                     }, keyHolder);
 
-
                     if (affected_row_count < 1)
                     {
                         //TODO: Exception. Internal server error.
                     }
                     cartItem.setCartItemId(keyHolder.getKey().toString());
                 }
-                return cartItem;
             }
+            Variables vars = new Variables();
+            Map<String, Object> map = new HashMap<String, Object>(0);
+            String get_cart_count_sql = "select count(*) from cart_item where cartid=(select cartid from cart where cuid=?) "+
+                                        "and cartisid=(select cartisid from cart_item_status where name='Active')";
+            int cartItemCount = jdbcTemplateObject.queryForObject(get_cart_count_sql, new Object[]{customerId}, Integer.TYPE);
 
+            map.put("cartItemCount", cartItemCount);
+            map.put("cartItem", cartItem);
+            vars.setVariables(map);
+            Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getCartItems(customerId, null)).withSelfRel();
+            vars.add(selfLink);
+            return vars;
         }
         catch(DataAccessException e)
         {
