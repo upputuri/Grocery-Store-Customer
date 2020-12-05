@@ -10,7 +10,7 @@
 	</parent>
 	<groupId>com.dolittle.ecom</groupId>
 	<artifactId>customer-runner</artifactId>
-	<version>v0.4-alpha-SNAPSHOT</version>
+	<version>v0.4-alpha</version>
 	<name>customer</name>
 	<description>Demo project for Spring Boot</description>
 

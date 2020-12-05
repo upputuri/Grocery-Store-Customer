@@ -167,7 +167,8 @@ public class ProductsService{
             String products_page_fetch_sql = "select *, products.variant_price*(1-COALESCE(offer_discount,0)/100) as itemprice from (select i.iid, ins.price as variant_price, GROUP_CONCAT(concat(ia.name,'#',iav.value) SEPARATOR ',') as attributes, i.created_ts as created_ts, i.name as itemname, i.description, i.price, i.item_discount, p.imagefiles, "+
             "offers.discount as offer_discount, offers.amount as offer_amount "+score_col_sql+
             "from item_gi igi inner join item_item i on (i.giid=igi.giid) "+
-            "inner join inventory_set ins on (i.iid=ins.iid) "+
+            "inner join inventory_set ins on (i.iid=ins.iid and ins.issid='1' and ins.istid='1') "+
+            "inner join inventory_set_variations isv on (isv.isvid=ins.isvid and isv.isvsid='1') "+
             "left join item_gi_attribute igia on (igi.giid = igia.giid) "+
             "inner join item_attribute ia on (igia.aid=ia.aid and "+attribute_name_filter_sql+") "+
                                                                   "left join item_attribute_group iag on (ia.agid=iag.agid) "+
@@ -259,7 +260,7 @@ public class ProductsService{
                                             "FROM item_item i INNER JOIN ( SELECT * FROM ( SELECT *, SUM(quantity1) as quantity FROM ( SELECT iss.iid,iss.isvid,iss.price,iss.mrp,isv.name,isv.description,count(isi.isiid) as quantity1, imagefiles FROM inventory_set iss "+
                                             "LEFT JOIN (select * from inventory_set_item isi_a where isi_a.isisid='1') as isi ON (iss.isid = isi.isid) INNER JOIN inventory_set_variations isv ON (iss.isvid = isv.isvid) LEFT JOIN (select isvid, GROUP_CONCAT(image separator ',') as imagefiles from inventory_set_variations_photos group by isvid) as isvp ON (iss.isvid = isvp.isvid) "+
                                             "WHERE iss.issid = '1' AND iss.istid='1' AND isv.isvsid = '1' "+
-                                            "GROUP By iss.isid ORDER BY price DESC ) as x GROUP BY x.isvid ORDER BY x.price DESC ) as y ORDER BY y.price DESC ) as lis ON (i.iid = lis.iid) LEFT JOIN "+
+                                            "GROUP By iss.isid) as x GROUP BY x.isvid) as y) as lis ON (i.iid = lis.iid) LEFT JOIN "+
                                             "( SELECT (CASE WHEN ioie.exe_o IS NULL THEN SUM(ioi.quantity) ELSE SUM(ioi.quantity) - SUM(ioie.exe_o) END) as ordered, ioi.isvid FROM item_order_item as ioi LEFT JOIN item_order io ON "+
                                             "(ioi.oid = io.oid) LEFT JOIN ( SELECT count(exe_ioie.oiid) as exe_o, exe_ioie.oiid from item_order_item_execution exe_ioie GROUP BY exe_ioie.oiid ) as ioie ON ioie.oiid = ioi.oiid "+
                                             "LEFT JOIN inventory_set_variations isv ON (isv.isvid = ioi.isvid) WHERE (io.osid = '1' OR io.osid = '7') AND ioi.oisid='1' AND isv.isvsid = '1' GROUP BY isv.isvid ) as ois ON (lis.isvid = ois.isvid) "+
