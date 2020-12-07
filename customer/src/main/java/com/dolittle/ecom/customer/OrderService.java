@@ -188,7 +188,8 @@ public class OrderService {
 
     @PostMapping(value = "/orders", produces = "application/hal+json")
     @Transactional
-    public Order createOrder(@RequestBody OrderContext orderContext, Authentication auth)
+    public Order createOrder(@RequestBody OrderContext orderContext,
+                        @RequestParam(value = "coverid", required=true) String coverId, Authentication auth)
     {
         
         CustomerRunnerUtil.validateAndGetAuthCustomer(auth, orderContext.getCustomerId());
@@ -227,7 +228,7 @@ public class OrderService {
         // 6. Change status of cart items in db to 'executed'
 
         log.info("Beginning to create an order for customer - "+orderContext.getCustomerId());
-        Order preOrder = this.createPreOrder(orderContext, true, auth);
+        Order preOrder = this.createPreOrder(orderContext, true, coverId, auth);
 
         int osid = jdbcTemplateObject.queryForObject("select osid from item_order_status where name='Initial'", Integer.TYPE);
 
@@ -346,13 +347,14 @@ public class OrderService {
     @PostMapping(value = "/orders/preorders", produces = "application/hal+json")
     @Transactional
     public Order createPreOrder(@RequestBody OrderContext context , 
-                @RequestParam(value="skiptransaction", required=false, defaultValue = "false") boolean skipTransaction, Authentication auth)
+                @RequestParam(value="skiptransaction", required=false, defaultValue = "false") boolean skipTransaction,
+                @RequestParam(value = "coverid", required=true) String coverId, Authentication auth)
     {
         log.info("Beginning to create a preorder for customer - "+context.getCustomerId());
         CustomerRunnerUtil.validateAndGetAuthCustomer(auth, context.getCustomerId());
         Order order = new Order();
         order.setCustomerId(context.getCustomerId());
-        CollectionModel<CartItem> cartItemsModel = cartService.getCartItems(context.getCustomerId(), auth);
+        CollectionModel<CartItem> cartItemsModel = cartService.getCartItems(context.getCustomerId(), coverId, auth);
         cartItemsModel.forEach((cartItem) -> {
             order.addOrderItem(cartItem.getOrderItem());
             log.debug("Adding cart item to order "+cartItem.toString());
@@ -385,12 +387,12 @@ public class OrderService {
             private BigDecimal minOrderAmount;
         }
 
-        String fetch_shipping_charges_sql = "select shipping_cost, min_order_amount from country where ctid='1'";
-        OrderCharge shippingCharge = jdbcTemplateObject.queryForObject(fetch_shipping_charges_sql, (rs, rowNum)->{
+        String fetch_shipping_charges_sql = "select shipping_cost, coalesce(min_order_amount, 0) as applicableBelowAmount from coverage where coverid=?";
+        OrderCharge shippingCharge = jdbcTemplateObject.queryForObject(fetch_shipping_charges_sql, new Object[]{coverId}, (rs, rowNum)->{
             OrderCharge oc = new OrderCharge();
             oc.cost = rs.getBigDecimal("shipping_cost");
             oc.name = "shipping charge";
-            oc.minOrderAmount = rs.getBigDecimal("min_order_amount");
+            oc.minOrderAmount = rs.getBigDecimal("applicableBelowAmount");
             return oc;
         });
 
@@ -427,7 +429,7 @@ public class OrderService {
             sa.setLastName(rs.getString("last_name"));
             sa.setState(rs.getString("state"));
             sa.setStateId(rs.getInt("stid"));
-            Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).createPreOrder(context, false, auth)).withSelfRel();
+            Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).createPreOrder(context, false, coverId, auth)).withSelfRel();
             sa.add(selfLink);
             return sa;
         });
@@ -447,7 +449,7 @@ public class OrderService {
             sa.setLastName(rs.getString("last_name"));
             sa.setState(rs.getString("state"));
             sa.setStateId(rs.getInt("stid"));
-            Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).createPreOrder(context, false, auth)).withSelfRel();
+            Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).createPreOrder(context, false, coverId, auth)).withSelfRel();
             sa.add(selfLink);
             return sa;
         });
@@ -506,7 +508,7 @@ public class OrderService {
 
         //     order.setTransaction(transaction);
         // }
-        Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).createPreOrder(context, false, auth)).withSelfRel();
+        Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).createPreOrder(context, false, coverId, auth)).withSelfRel();
         order.add(selfLink);
         return order;
     }

@@ -93,6 +93,7 @@ public class ProductsService{
                                                 @RequestParam(value = "keywords", required=false, defaultValue = "") String keywords,
                                                 @RequestParam(value = "offset", required=false, defaultValue = "0") int pageOffset, 
                                                 @RequestParam(value = "size", required=false, defaultValue = "15") int pageSize,
+                                                @RequestParam(value = "coverid", required=true) String coverId,
                                                 @RequestBody(required=false) String filterString)
     {
 
@@ -220,7 +221,7 @@ public class ProductsService{
                     // List<InventorySetVariation> v = new ArrayList<InventorySetVariation>();
                     // v.add(variation);
                     // p.setVariations(v);
-                    Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getProductDetail(String.valueOf(rs.getInt("iid")))).withSelfRel();    
+                    Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getProductDetail(String.valueOf(rs.getInt("iid")), coverId)).withSelfRel();    
                     p.add(selfLink);               
                     return p;
                }               
@@ -258,6 +259,7 @@ public class ProductsService{
 
             String fetch_variations_sql = "SELECT i.iid, lis.price, lis.mrp, lis.imagefiles, offers.discount as offer_discount, lis.description, lis.isvid, lis.name, (CASE WHEN lis.quantity IS NULL THEN 0 ELSE lis.quantity END) as quantity, (CASE WHEN ois.ordered IS NULL THEN 0 ELSE ois.ordered END) as ordered "+
                                             "FROM item_item i INNER JOIN ( SELECT * FROM ( SELECT *, SUM(quantity1) as quantity FROM ( SELECT iss.iid,iss.isvid,iss.price,iss.mrp,isv.name,isv.description,count(isi.isiid) as quantity1, imagefiles FROM inventory_set iss "+
+                                            "INNER JOIN (select chkid from checkpoint chk inner join coverage_locality covl on (chk.coverlid=covl.coverlid and covl.coverlsid = 1) inner join coverage cov on (covl.coverid=cov.coverid and coversid = 1) where cov.coverid = ?) as chks on (iss.chkid=chks.chkid) "+
                                             "LEFT JOIN (select * from inventory_set_item isi_a where isi_a.isisid='1') as isi ON (iss.isid = isi.isid) INNER JOIN inventory_set_variations isv ON (iss.isvid = isv.isvid) LEFT JOIN (select isvid, GROUP_CONCAT(image separator ',') as imagefiles from inventory_set_variations_photos group by isvid) as isvp ON (iss.isvid = isvp.isvid) "+
                                             "WHERE iss.issid = '1' AND iss.istid='1' AND isv.isvsid = '1' "+
                                             "GROUP By iss.isid) as x GROUP BY x.isvid) as y) as lis ON (i.iid = lis.iid) LEFT JOIN "+
@@ -269,7 +271,7 @@ public class ProductsService{
                                             "where i.iid in ("+(productIdCsv.equals("")?"''":productIdCsv)+") order by i.iid";
 
 
-            List<InventorySetVariation> variations = jdbcTemplateObject.query(fetch_variations_sql, new Object[]{}, (rs, rowNum) -> {
+            List<InventorySetVariation> variations = jdbcTemplateObject.query(fetch_variations_sql, new Object[]{coverId}, (rs, rowNum) -> {
                 InventorySetVariation isv = new InventorySetVariation(String.valueOf(rs.getInt("isvid")), rs.getString("name"), rs.getBigDecimal("price"), rs.getBigDecimal("mrp"));
                 BigDecimal offerDiscount = rs.getBigDecimal("offer_discount");
                 BigDecimal variationPrice = rs.getBigDecimal("price");
@@ -318,13 +320,14 @@ public class ProductsService{
        page.setTotalCount(totalCount);
        page.setProducts(prods);
        page.setFilterOptions(filterOptions);
-       Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getProducts(categoryId,"","","", 0, 1000000,null)).withSelfRel();
+       Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getProducts(categoryId,"","","", 0, 1000000, coverId,filterString)).withSelfRel();
        page.add(selfLink);
        return page;
     }
     
     @GetMapping(value = "/products/{id}", produces = "application/hal+json")
-    public Product getProductDetail(@PathVariable(value = "id") String productId)
+    public Product getProductDetail(@PathVariable(value = "id") String productId,
+                            @RequestParam(value = "coverid", required=true) String coverId)
     {
         // #Get product detail
         // select i.iid, i.name as item_name, i.description, i.price, i.item_discount, i.istatusid, p.imagefiles, p.title, s.name as status, s.description 
@@ -354,8 +357,9 @@ public class ProductsService{
                                                 "left join (select iip.iid, GROUP_CONCAT(distinct iip.image SEPARATOR ',') as imagefiles from item_item_photo iip group by iip.iid) as p on (i.iid=p.iid) "+
                                                 "left join (select i.iid, "+
                                                 "GROUP_CONCAT(distinct concat_ws('#', iag.name, ia.name, iav.value) SEPARATOR ',') as attributes "+
-                                                "from item_gi igi inner join item_item i on (i.giid=igi.giid) "+
-                                                "                left join item_gi_attribute igia on (igi.giid = igia.giid) "+
+                                                // "from item_gi igi inner join item_item i on (i.giid=igi.giid) "+
+                                                "from item_item i "+
+                                                "                left join item_gi_attribute igia on (i.giid = igia.giid) "+
                                                 "                inner join item_attribute ia on (igia.aid=ia.aid) "+
                                                 "                    left join item_attribute_group iag on (ia.agid=iag.agid) "+
                                                 "                    inner join item_attribute_value iav on (iav.aid=ia.aid) "+
@@ -408,12 +412,13 @@ public class ProductsService{
                     }
                     p.setAttributes(attributes);
                     
-                    Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getProductDetail(String.valueOf(rs.getInt("iid")))).withSelfRel();    
+                    Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getProductDetail(productId, coverId)).withSelfRel();    
                     p.add(selfLink);               
                     return p;
             });
             String fetch_variations_sql = "SELECT i.iid, lis.imagefiles, lis.price, lis.mrp, offers.discount as offer_discount, lis.description, lis.isvid, lis.name, (CASE WHEN lis.quantity IS NULL THEN 0 ELSE lis.quantity END) as quantity, (CASE WHEN ois.ordered IS NULL THEN 0 ELSE ois.ordered END) as ordered "+
                                             "FROM item_item i INNER JOIN ( SELECT * FROM ( SELECT *, SUM(quantity1) as quantity FROM ( SELECT iss.iid,iss.isvid,iss.price,iss.mrp,isv.name,isv.description,count(isi.isiid) as quantity1, imagefiles FROM inventory_set iss "+
+                                            "INNER JOIN (select chkid from checkpoint chk inner join coverage_locality covl on (chk.coverlid=covl.coverlid and covl.coverlsid = 1) inner join coverage cov on (covl.coverid=cov.coverid and coversid = 1) where cov.coverid = ?) as chks on (iss.chkid=chks.chkid) "+
                                             "LEFT JOIN (select * from inventory_set_item isi_a where isi_a.isisid='1') as isi ON (iss.isid = isi.isid) INNER JOIN inventory_set_variations isv ON (iss.isvid = isv.isvid) LEFT JOIN (select isvid, GROUP_CONCAT(image separator ',') as imagefiles from inventory_set_variations_photos group by isvid) as isvp ON (iss.isvid = isvp.isvid) "+
                                             "WHERE iss.issid = '1' AND iss.istid='1' AND isv.isvsid = '1' "+
                                             "GROUP By iss.isid ORDER BY price DESC ) as x GROUP BY x.isvid ORDER BY x.price DESC ) as y ORDER BY y.price DESC ) as lis ON (i.iid = lis.iid) LEFT JOIN "+
@@ -424,7 +429,7 @@ public class ProductsService{
                                             "(select offsid from offer_status where name='Active')) as offers on (i.iid=offers.iid) "+
                                             "where i.iid = ?";
             
-            List<InventorySetVariation> variations = jdbcTemplateObject.query(fetch_variations_sql, new Object[]{product.getId()}, (rs, rowNum) -> {
+            List<InventorySetVariation> variations = jdbcTemplateObject.query(fetch_variations_sql, new Object[]{coverId, product.getId()}, (rs, rowNum) -> {
                 InventorySetVariation isv = new InventorySetVariation(String.valueOf(rs.getInt("isvid")), rs.getString("name"), rs.getBigDecimal("price"), rs.getBigDecimal("mrp"));
                 BigDecimal offerDiscount = rs.getBigDecimal("offer_discount");
                 BigDecimal variationPrice = rs.getBigDecimal("price");

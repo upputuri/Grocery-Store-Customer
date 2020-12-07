@@ -32,6 +32,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -46,7 +47,9 @@ public class CustomerCartService
 
     @Transactional(propagation = Propagation.REQUIRED)
     @GetMapping(value="/customers/{id}/cart/items", produces="application/hal+json")
-    public CollectionModel<CartItem> getCartItems(@PathVariable(value="id", required = true) String customerId, Authentication auth)
+    public CollectionModel<CartItem> getCartItems(@PathVariable(value="id", required = true) String customerId, 
+            @RequestParam(value = "coverid", required=true) String coverId, 
+            Authentication auth)
     {
         log.info("Processing request to get cart items of customer Id: "+customerId);
         Customer customer = CustomerRunnerUtil.validateAndGetAuthCustomer(auth, customerId);
@@ -55,12 +58,13 @@ public class CustomerCartService
             "offers.discount as offer_discount, offers.amount as offer_amount "+
             "from cart as c, cart_item as ci, cart_item_status as cis, item_item as ii left join (select oi.iid, discount, amount from offer_item oi, offer where offer.offid=oi.offid and offer.offsid= "+
             "(select offsid from offer_status where name='Active')) as offers on (ii.iid=offers.iid), "+
-            "inventory_set as ins, inventory_set_variations as insv, "+
+            "inventory_set_variations as insv, inventory_set as ins "+
+            "INNER JOIN (select chkid from checkpoint chk inner join coverage_locality covl on (chk.coverlid=covl.coverlid and covl.coverlsid = 1) inner join coverage cov on (covl.coverid=cov.coverid and coversid = 1) where cov.coverid = ?) as chks on (ins.chkid=chks.chkid), "+
             "(select iid, title, image from item_item_photo group by iid) as iip "+
             "where c.cuid = ? and c.cartid = ci.cartid and iip.iid = ii.iid and ci.iid = ii.iid and ci.cartisid = cis.cartisid and ins.isvid = ci.isvid and insv.isvid = ci.isvid "+
             "and ins.issid = '1' AND ins.istid='1' AND insv.isvsid = '1' and cis.name = 'Active'";
 
-            List<CartItem> cartItems = jdbcTemplateObject.query( sql, new Object[]{customer.getId()} , (rs, rowNumber) -> {
+            List<CartItem> cartItems = jdbcTemplateObject.query( sql, new Object[]{coverId, customer.getId()} , (rs, rowNumber) -> {
                 CartItem ci = new CartItem(String.valueOf(rs.getInt("iid")), String.valueOf(rs.getInt("isvid")));
                     BigDecimal offerDiscount = rs.getBigDecimal("offer_discount");
                     BigDecimal variationPrice = rs.getBigDecimal("variant_price");
@@ -92,7 +96,7 @@ public class CustomerCartService
                     return ci;
             }
             );
-            Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getCartItems(customerId, null)).withSelfRel();
+            Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getCartItems(customerId, coverId, null)).withSelfRel();
             return CollectionModel.of(cartItems, selfLink);
         }
         catch(DataAccessException e)
@@ -104,13 +108,14 @@ public class CustomerCartService
     
     @Transactional(propagation = Propagation.REQUIRED)
     @GetMapping(value="/customers/{id}/cart", produces="application/hal+json")
-    public Cart getCart(@PathVariable(value="id", required = true) String customerId, Authentication auth)
+    public Cart getCart(@PathVariable(value="id", required = true) String customerId, 
+                    @RequestParam(value = "coverid", required=true) String coverId, Authentication auth)
     {
         log.info("Processing request to get cart");
         Customer customer = CustomerRunnerUtil.validateAndGetAuthCustomer(auth, customerId);
-        Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getCart(customer.getId(), null)).withSelfRel();
+        Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getCart(customer.getId(), coverId, null)).withSelfRel();
         Cart cart = new Cart();
-        cart.setCartItems(new ArrayList<CartItem>(getCartItems(customerId, auth).getContent()));
+        cart.setCartItems(new ArrayList<CartItem>(getCartItems(customerId, coverId, auth).getContent()));
         cart.add(selfLink);
         return cart;
     }
@@ -173,7 +178,7 @@ public class CustomerCartService
             map.put("cartItemCount", cartItemCount);
             map.put("cartItem", cartItem);
             vars.setVariables(map);
-            Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getCartItems(customerId, null)).withSelfRel();
+            Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getCartItems(customerId, null, null)).withSelfRel();
             vars.add(selfLink);
             return vars;
         }
