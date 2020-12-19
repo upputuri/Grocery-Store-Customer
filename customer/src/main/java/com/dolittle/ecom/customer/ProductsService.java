@@ -259,7 +259,7 @@ public class ProductsService{
 
             String fetch_variations_sql = "SELECT i.iid, lis.price, lis.mrp, lis.imagefiles, offers.discount as offer_discount, lis.description, lis.isvid, lis.name, (CASE WHEN lis.quantity IS NULL THEN 0 ELSE lis.quantity END) as quantity, (CASE WHEN ois.ordered IS NULL THEN 0 ELSE ois.ordered END) as ordered "+
                                             "FROM item_item i INNER JOIN ( SELECT * FROM ( SELECT *, SUM(quantity1) as quantity FROM ( SELECT iss.iid,iss.isvid,iss.price,iss.mrp,isv.name,isv.description,count(isi.isiid) as quantity1, imagefiles FROM inventory_set iss "+
-                                            "INNER JOIN (select chkid from checkpoint chk inner join coverage_locality covl on (chk.coverlid=covl.coverlid and covl.coverlsid = 1) inner join coverage cov on (covl.coverid=cov.coverid and coversid = 1) where cov.coverid = ?) as chks on (iss.chkid=chks.chkid) "+
+                                            "INNER JOIN checkpoint on (iss.chkid=checkpoint.chkid and checkpoint.coverid=?) "+
                                             "LEFT JOIN (select * from inventory_set_item isi_a where isi_a.isisid='1') as isi ON (iss.isid = isi.isid) INNER JOIN inventory_set_variations isv ON (iss.isvid = isv.isvid) LEFT JOIN (select isvid, GROUP_CONCAT(image separator ',') as imagefiles from inventory_set_variations_photos group by isvid) as isvp ON (iss.isvid = isvp.isvid) "+
                                             "WHERE iss.issid = '1' AND iss.istid='1' AND isv.isvsid = '1' "+
                                             "GROUP By iss.isid) as x GROUP BY x.isvid) as y) as lis ON (i.iid = lis.iid) LEFT JOIN "+
@@ -418,7 +418,7 @@ public class ProductsService{
             });
             String fetch_variations_sql = "SELECT i.iid, lis.imagefiles, lis.price, lis.mrp, offers.discount as offer_discount, lis.description, lis.isvid, lis.name, (CASE WHEN lis.quantity IS NULL THEN 0 ELSE lis.quantity END) as quantity, (CASE WHEN ois.ordered IS NULL THEN 0 ELSE ois.ordered END) as ordered "+
                                             "FROM item_item i INNER JOIN ( SELECT * FROM ( SELECT *, SUM(quantity1) as quantity FROM ( SELECT iss.iid,iss.isvid,iss.price,iss.mrp,isv.name,isv.description,count(isi.isiid) as quantity1, imagefiles FROM inventory_set iss "+
-                                            "INNER JOIN (select chkid from checkpoint chk inner join coverage_locality covl on (chk.coverlid=covl.coverlid and covl.coverlsid = 1) inner join coverage cov on (covl.coverid=cov.coverid and coversid = 1) where cov.coverid = ?) as chks on (iss.chkid=chks.chkid) "+
+                                            "INNER JOIN checkpoint on (iss.chkid=checkpoint.chkid and checkpoint.coverid=?) "+
                                             "LEFT JOIN (select * from inventory_set_item isi_a where isi_a.isisid='1') as isi ON (iss.isid = isi.isid) INNER JOIN inventory_set_variations isv ON (iss.isvid = isv.isvid) LEFT JOIN (select isvid, GROUP_CONCAT(image separator ',') as imagefiles from inventory_set_variations_photos group by isvid) as isvp ON (iss.isvid = isvp.isvid) "+
                                             "WHERE iss.issid = '1' AND iss.istid='1' AND isv.isvsid = '1' "+
                                             "GROUP By iss.isid ORDER BY price DESC ) as x GROUP BY x.isvid ORDER BY x.price DESC ) as y ORDER BY y.price DESC ) as lis ON (i.iid = lis.iid) LEFT JOIN "+

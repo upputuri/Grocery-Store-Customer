@@ -18,6 +18,7 @@ public @Data class OrderSummary extends RepresentationModel<OrderSummary>{
     private String shippingAddressId;
     private Calendar createdTS;
     private String transactionId;
+    private int cancelTimeoutMins;
     private String orderStatus;
     @JsonProperty(access = Access.READ_ONLY)
     @JsonFormat(shape = JsonFormat.Shape.STRING)

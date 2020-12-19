@@ -9,6 +9,7 @@ import com.dolittle.ecom.app.AppUser;
 import com.dolittle.ecom.app.util.CustomerRunnerUtil;
 import com.dolittle.ecom.customer.bo.Customer;
 import com.dolittle.ecom.customer.bo.CustomerQuery;
+import com.dolittle.ecom.customer.bo.ProductReview;
 import com.dolittle.ecom.customer.bo.ShippingAddress;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,9 +31,11 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
+import io.micrometer.core.instrument.util.StringUtils;
 import lombok.extern.slf4j.Slf4j;
 
 @RestController
@@ -399,6 +402,69 @@ public class CustomerDataService {
         }
     }
 
+    @Transactional
+    @PostMapping(value = "/customers/{customerId}/productreviews", produces = "application/hal+json")
+    public void addOrUpdateProductReview(@RequestBody ProductReview review, @PathVariable String customerId, Authentication auth)
+    {
+        log.info("Processing add or update prduct review request for customer Id: "+customerId);
+        CustomerRunnerUtil.validateAndGetAuthCustomer(auth, customerId);
+        try{
+            if (review.getRating() > 0) {
+                String rating_update_sql = "update tbl_products_ratings set ratings_score=?, ratings_status=1 where product_id = ? and user_id = ?";
+                int rows = jdbcTemplateObject.update(rating_update_sql, new Object[]{review.getRating(), review.getProductId(), customerId});
+                if (rows == 0){
+                    String rating_insert_sql = "insert into tbl_products_ratings (product_id, user_id, ratings_score, ratings_status) values (?,?,?,1)";
+                    jdbcTemplateObject.update(rating_insert_sql, new Object[]{review.getProductId(), customerId, review.getRating()});
+                }
+            }
+            else {
+                log.error("Invalid rating submitted");
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid rating submitted");
+            }
 
+            if (StringUtils.isNotEmpty(review.getReviewTitle()) || StringUtils.isNotEmpty(review.getReviewDetail())){
+                String review_update_sql = "update tbl_products_review set title=?, description=?, reviewsid=3 where product_id = ? and user_id = ?";
+                int rows = jdbcTemplateObject.update(review_update_sql, new Object[]{review.getReviewTitle(), review.getReviewDetail(), review.getProductId(), customerId});
+                if (rows == 0){
+                    String review_insert_sql = "insert into tbl_products_review (product_id, user_id, title, description, reviewsid) values (?, ?, ?, ?, 3)";
+                    jdbcTemplateObject.update(review_insert_sql, new Object[]{review.getProductId(), customerId, review.getReviewTitle(), review.getReviewDetail()});
+                }
+            }
+
+        }
+        catch(DataAccessException e){
+            log.error("An exception occurred while inserting a new Shipping Address", e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "An internal error occurred!, pls retry after some time or pls call support");            
+        }
+    }
+
+    @GetMapping(value = "/customers/{customerId}/productreviews", produces = "application/hal+json")
+    public ProductReview getProductReview(@RequestParam (value="productid", required=false) String productId, @PathVariable String customerId, Authentication auth){
+        log.info("Processing get a single product review request for customer Id: "+customerId);
+        CustomerRunnerUtil.validateAndGetAuthCustomer(auth, customerId);
+        try{
+            String get_single_product_rating = "select ratings_score from tbl_products_ratings where product_id=? and user_id=? and ratings_status=1";
+            ProductReview review = new ProductReview();
+            jdbcTemplateObject.query(get_single_product_rating, new Object[]{productId, customerId}, (rs, rowNum) -> {
+                review.setRating(rs.getInt("ratings_score"));
+                return null;
+            });
+            
+            String get_single_product_review = "select title, description from tbl_products_review where product_id=? and user_id=?";
+            jdbcTemplateObject.query(get_single_product_review, new Object[]{productId, customerId}, (rs, rowNum) -> {
+                review.setReviewTitle(rs.getString("title"));
+                review.setReviewDetail(rs.getString("description"));
+                return null;
+            });
+
+            Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getProductReview(productId, customerId, auth)).withSelfRel();
+            review.add(selfLink);
+            return review;
+        }
+        catch(DataAccessException e){
+            log.error("An exception occurred while getting product review", e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "An internal error occurred!, pls retry after some time or pls call support");            
+        }
+    }
 
 }

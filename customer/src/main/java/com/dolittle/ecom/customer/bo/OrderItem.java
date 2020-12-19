@@ -26,9 +26,10 @@ public @Data class OrderItem extends RepresentationModel<OrderItem>{
     @JsonFormat(shape = JsonFormat.Shape.STRING) 
     private BigDecimal totalPriceAfterDiscount = BigDecimal.ZERO;
 
-    public OrderItem(String productId, String insvid, int qty)
+    public OrderItem(String id, String productId, String insvid, int qty)
     {
         super();
+        this.id=id;
         this.productId = productId;
         this.insvid = insvid;
         this.qty = qty;

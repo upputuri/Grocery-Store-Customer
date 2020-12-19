@@ -4,6 +4,7 @@ import java.io.UnsupportedEncodingException;
 import java.math.BigInteger;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Calendar;
 import java.util.Random;
 
 import com.dolittle.ecom.app.AppUser;
@@ -135,8 +136,8 @@ public class CustomerRunnerUtil {
      
     public static void main(String st[])
     {
-        PasswordEncoder encoder = new GrocPasswordEncoder();
-        System.out.println(encoder.encode("Dolittle123"));
+        // PasswordEncoder encoder = new GrocPasswordEncoder();
+        // System.out.println(encoder.encode("Dolittle123"));
         // Pattern csv_regex = Pattern.compile("(?:^|,)\s*(?:(?:(?=\")\"([^\"].*?)\")|(?:(?!\")(.*?)))(?=,|$)", Pattern.CASE_INSENSITIVE);
         // Matcher csv_matcher = csv_regex.matcher("abc,def,aldkj,slfkjsf");
        
@@ -146,5 +147,8 @@ public class CustomerRunnerUtil {
         // String date = "2020-11-25T11:26:22+05:30";
         // ZonedDateTime zdt = ZonedDateTime.parse(date);
         // System.out.println(zdt.getYear()+"-"+zdt.getMonthValue()+"-"+zdt.getDayOfMonth());
+
+        Calendar rightNow = Calendar.getInstance();
+        System.out.println(rightNow);
     }
 }

@@ -59,7 +59,7 @@ public class CustomerCartService
             "from cart as c, cart_item as ci, cart_item_status as cis, item_item as ii left join (select oi.iid, discount, amount from offer_item oi, offer where offer.offid=oi.offid and offer.offsid= "+
             "(select offsid from offer_status where name='Active')) as offers on (ii.iid=offers.iid), "+
             "inventory_set_variations as insv, inventory_set as ins "+
-            "INNER JOIN (select chkid from checkpoint chk inner join coverage_locality covl on (chk.coverlid=covl.coverlid and covl.coverlsid = 1) inner join coverage cov on (covl.coverid=cov.coverid and coversid = 1) where cov.coverid = ?) as chks on (ins.chkid=chks.chkid), "+
+            "INNER JOIN checkpoint on (ins.chkid=checkpoint.chkid and checkpoint.coverid=?), "+
             "(select iid, title, image from item_item_photo group by iid) as iip "+
             "where c.cuid = ? and c.cartid = ci.cartid and iip.iid = ii.iid and ci.iid = ii.iid and ci.cartisid = cis.cartisid and ins.isvid = ci.isvid and insv.isvid = ci.isvid "+
             "and ins.issid = '1' AND ins.istid='1' AND insv.isvsid = '1' and cis.name = 'Active'";
