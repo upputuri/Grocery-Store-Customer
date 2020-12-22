@@ -238,8 +238,8 @@ public class CustomerDataService {
         CustomerRunnerUtil.validateAndGetAuthCustomer(auth, customerId);
         try{
             List<ShippingAddress> addressList = new ArrayList<ShippingAddress>();
-            String get_customer_addresses = "select sa.said, sa.first_name, sa.last_name, sa.line1, sa.line2, sa.zip_code, sa.mobile, sa.city, sa.stid, state.state "+
-                                            "from customer_shipping_address sa, state "+
+            String get_customer_addresses = "select sa.said, sa.default_address, sa.first_name, sa.last_name, sa.line1, sa.line2, sa.zip_code, sa.mobile, sa.city, sa.stid, atype.name as label, atype.addtid, state.state "+
+                                            "from customer_shipping_address sa left join address_type atype on (atype.addtid = sa.addtid), state "+
                                             "where sa.cuid = ? and sa.stid = state.stid and sa.sasid = (select sasid from customer_shipping_address_status where name = 'Active')";
     
             addressList = jdbcTemplateObject.query(get_customer_addresses, new Object[]{customerId}, (rs, rowNumber) -> {
@@ -250,6 +250,9 @@ public class CustomerDataService {
                 sa.setLastName(rs.getString("last_name"));
                 sa.setState(rs.getString("state"));
                 sa.setStateId(rs.getInt("stid"));
+                sa.setDefault(rs.getInt("default_address") == 1);
+                sa.setType(rs.getString("label"));
+                sa.setTypeId(String.valueOf(rs.getInt("addtid")));
                 Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getCustomerAddresses(customerId, null)).withSelfRel();
                 sa.add(selfLink);
                 return sa;
@@ -318,11 +321,17 @@ public class CustomerDataService {
         try{  
             log.info("Processing request to update address of customer Id {} with addressId {}", customerId, address.getId());
             CustomerRunnerUtil.validateAndGetAuthCustomer(auth, customerId);
-            String address_update_sql = "update customer_shipping_address set first_name=?, last_name=?, line1=?, line2=?, city=?, zip_code=?, mobile=?, stid=? "+
+
+            if (address.isDefault()) {
+                // Remove current default if any
+                jdbcTemplateObject.update("update customer_shipping_address set default_address=0 where default_address=1");
+            }
+
+            String address_update_sql = "update customer_shipping_address set addtid=?, first_name=?, last_name=?, line1=?, line2=?, city=?, zip_code=?, mobile=?, stid=?, default_address=? "+
                                         "where said=?";
                             
-            int rows = jdbcTemplateObject.update(address_update_sql, address.getFirstName(), address.getLastName(), address.getLine1(), address.getLine2(),
-                                                            address.getCity(), address.getZipcode(), address.getPhoneNumber(), address.getStateId(), addressId);
+            int rows = jdbcTemplateObject.update(address_update_sql, address.getTypeId(), address.getFirstName(), address.getLastName(), address.getLine1(), address.getLine2(),
+                                                            address.getCity(), address.getZipcode(), address.getPhoneNumber(), address.getStateId(), address.isDefault()?1:0, addressId);
 
             if (rows != 1)
             {
@@ -423,10 +432,10 @@ public class CustomerDataService {
             }
 
             if (StringUtils.isNotEmpty(review.getReviewTitle()) || StringUtils.isNotEmpty(review.getReviewDetail())){
-                String review_update_sql = "update tbl_products_review set title=?, description=?, reviewsid=3 where product_id = ? and user_id = ?";
+                String review_update_sql = "update tbl_products_review set title=?, description=?, reviewsid=2 where product_id = ? and user_id = ?";
                 int rows = jdbcTemplateObject.update(review_update_sql, new Object[]{review.getReviewTitle(), review.getReviewDetail(), review.getProductId(), customerId});
                 if (rows == 0){
-                    String review_insert_sql = "insert into tbl_products_review (product_id, user_id, title, description, reviewsid) values (?, ?, ?, ?, 3)";
+                    String review_insert_sql = "insert into tbl_products_review (product_id, user_id, title, description, reviewsid) values (?, ?, ?, ?, 2)";
                     jdbcTemplateObject.update(review_insert_sql, new Object[]{review.getProductId(), customerId, review.getReviewTitle(), review.getReviewDetail()});
                 }
             }
@@ -450,7 +459,7 @@ public class CustomerDataService {
                 return null;
             });
             
-            String get_single_product_review = "select title, description from tbl_products_review where product_id=? and user_id=?";
+            String get_single_product_review = "select title, description from tbl_products_review where product_id=? and user_id=? and reviewsid != 3";
             jdbcTemplateObject.query(get_single_product_review, new Object[]{productId, customerId}, (rs, rowNum) -> {
                 review.setReviewTitle(rs.getString("title"));
                 review.setReviewDetail(rs.getString("description"));

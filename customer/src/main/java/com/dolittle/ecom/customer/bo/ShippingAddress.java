@@ -7,7 +7,8 @@ import lombok.Data;
 public @Data class ShippingAddress extends RepresentationModel<ShippingAddress>{
     private String id;
     private boolean isDefault;
-    private boolean label;
+    private String type;
+    private String typeId;
     private String firstName;
     private String lastName;
     private final String line1;
