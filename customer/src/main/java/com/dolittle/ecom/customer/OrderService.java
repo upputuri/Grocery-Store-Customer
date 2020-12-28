@@ -23,6 +23,7 @@ import com.dolittle.ecom.customer.bo.general.PromoCode;
 import com.dolittle.ecom.customer.payments.PGIService;
 import com.mysql.cj.util.StringUtils;
 
+import org.apache.commons.lang3.tuple.Pair;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.BeanFactoryAnnotationUtils;
 import org.springframework.context.ApplicationContext;
@@ -235,11 +236,13 @@ public class OrderService {
         String tran_id = orderContext.getTransactionId();
         String orderString = "";
         Calendar order_ts = Calendar.getInstance();
-        jdbcTemplateObject.query("select created_ts, response from transaction where tid=?", new Object[]{tran_id}, (rs,rowNum)->{
-            order_ts.setTimeInMillis(rs.getTimestamp("created_ts").getTime());
-            orderString.concat(rs.getString("response"));
-            return null;
+        List<Pair<Long, String>> resultPairs = jdbcTemplateObject.query("select created_ts, response from transaction where tid=?", new Object[]{tran_id}, (rs,rowNum)->{
+            return Pair.of(rs.getTimestamp("created_ts").getTime(), rs.getString("response"));
         });
+
+        orderString = resultPairs.get(0).getRight();
+        order_ts.setTimeInMillis(resultPairs.get(0).getLeft());
+        
         int code = pgiService.validatePaymentResponse(orderString, orderContext.getPgiResponse());
         
         if (code != 0) {
