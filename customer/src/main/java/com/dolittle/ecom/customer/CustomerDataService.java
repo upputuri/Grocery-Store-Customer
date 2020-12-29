@@ -9,6 +9,7 @@ import com.dolittle.ecom.app.AppUser;
 import com.dolittle.ecom.app.util.CustomerRunnerUtil;
 import com.dolittle.ecom.customer.bo.Customer;
 import com.dolittle.ecom.customer.bo.CustomerQuery;
+import com.dolittle.ecom.customer.bo.ProductReview;
 import com.dolittle.ecom.customer.bo.ShippingAddress;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,9 +31,11 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
+import io.micrometer.core.instrument.util.StringUtils;
 import lombok.extern.slf4j.Slf4j;
 
 @RestController
@@ -235,8 +238,8 @@ public class CustomerDataService {
         CustomerRunnerUtil.validateAndGetAuthCustomer(auth, customerId);
         try{
             List<ShippingAddress> addressList = new ArrayList<ShippingAddress>();
-            String get_customer_addresses = "select sa.said, sa.first_name, sa.last_name, sa.line1, sa.line2, sa.zip_code, sa.mobile, sa.city, sa.stid, state.state "+
-                                            "from customer_shipping_address sa, state "+
+            String get_customer_addresses = "select sa.said, sa.default_address, sa.first_name, sa.last_name, sa.line1, sa.line2, sa.zip_code, sa.mobile, sa.city, sa.stid, atype.name as label, atype.addtid, state.state "+
+                                            "from customer_shipping_address sa left join address_type atype on (atype.addtid = sa.addtid), state "+
                                             "where sa.cuid = ? and sa.stid = state.stid and sa.sasid = (select sasid from customer_shipping_address_status where name = 'Active')";
     
             addressList = jdbcTemplateObject.query(get_customer_addresses, new Object[]{customerId}, (rs, rowNumber) -> {
@@ -247,6 +250,9 @@ public class CustomerDataService {
                 sa.setLastName(rs.getString("last_name"));
                 sa.setState(rs.getString("state"));
                 sa.setStateId(rs.getInt("stid"));
+                sa.setDefault(rs.getInt("default_address") == 1);
+                sa.setType(rs.getString("label"));
+                sa.setTypeId(String.valueOf(rs.getInt("addtid")));
                 Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getCustomerAddresses(customerId, null)).withSelfRel();
                 sa.add(selfLink);
                 return sa;
@@ -315,11 +321,17 @@ public class CustomerDataService {
         try{  
             log.info("Processing request to update address of customer Id {} with addressId {}", customerId, address.getId());
             CustomerRunnerUtil.validateAndGetAuthCustomer(auth, customerId);
-            String address_update_sql = "update customer_shipping_address set first_name=?, last_name=?, line1=?, line2=?, city=?, zip_code=?, mobile=?, stid=? "+
+
+            if (address.isDefault()) {
+                // Remove current default if any
+                jdbcTemplateObject.update("update customer_shipping_address set default_address=0 where default_address=1");
+            }
+
+            String address_update_sql = "update customer_shipping_address set addtid=?, first_name=?, last_name=?, line1=?, line2=?, city=?, zip_code=?, mobile=?, stid=?, default_address=? "+
                                         "where said=?";
                             
-            int rows = jdbcTemplateObject.update(address_update_sql, address.getFirstName(), address.getLastName(), address.getLine1(), address.getLine2(),
-                                                            address.getCity(), address.getZipcode(), address.getPhoneNumber(), address.getStateId(), addressId);
+            int rows = jdbcTemplateObject.update(address_update_sql, address.getTypeId(), address.getFirstName(), address.getLastName(), address.getLine1(), address.getLine2(),
+                                                            address.getCity(), address.getZipcode(), address.getPhoneNumber(), address.getStateId(), address.isDefault()?1:0, addressId);
 
             if (rows != 1)
             {
@@ -399,6 +411,69 @@ public class CustomerDataService {
         }
     }
 
+    @Transactional
+    @PostMapping(value = "/customers/{customerId}/productreviews", produces = "application/hal+json")
+    public void addOrUpdateProductReview(@RequestBody ProductReview review, @PathVariable String customerId, Authentication auth)
+    {
+        log.info("Processing add or update prduct review request for customer Id: "+customerId);
+        CustomerRunnerUtil.validateAndGetAuthCustomer(auth, customerId);
+        try{
+            if (review.getRating() > 0) {
+                String rating_update_sql = "update tbl_products_ratings set ratings_score=?, ratings_status=1 where product_id = ? and user_id = ?";
+                int rows = jdbcTemplateObject.update(rating_update_sql, new Object[]{review.getRating(), review.getProductId(), customerId});
+                if (rows == 0){
+                    String rating_insert_sql = "insert into tbl_products_ratings (product_id, user_id, ratings_score, ratings_status) values (?,?,?,1)";
+                    jdbcTemplateObject.update(rating_insert_sql, new Object[]{review.getProductId(), customerId, review.getRating()});
+                }
+            }
+            else {
+                log.error("Invalid rating submitted");
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid rating submitted");
+            }
 
+            if (StringUtils.isNotEmpty(review.getReviewTitle()) || StringUtils.isNotEmpty(review.getReviewDetail())){
+                String review_update_sql = "update tbl_products_review set title=?, description=?, reviewsid=2 where product_id = ? and user_id = ?";
+                int rows = jdbcTemplateObject.update(review_update_sql, new Object[]{review.getReviewTitle(), review.getReviewDetail(), review.getProductId(), customerId});
+                if (rows == 0){
+                    String review_insert_sql = "insert into tbl_products_review (product_id, user_id, title, description, reviewsid) values (?, ?, ?, ?, 2)";
+                    jdbcTemplateObject.update(review_insert_sql, new Object[]{review.getProductId(), customerId, review.getReviewTitle(), review.getReviewDetail()});
+                }
+            }
+
+        }
+        catch(DataAccessException e){
+            log.error("An exception occurred while inserting a new Shipping Address", e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "An internal error occurred!, pls retry after some time or pls call support");            
+        }
+    }
+
+    @GetMapping(value = "/customers/{customerId}/productreviews", produces = "application/hal+json")
+    public ProductReview getProductReview(@RequestParam (value="productid", required=false) String productId, @PathVariable String customerId, Authentication auth){
+        log.info("Processing get a single product review request for customer Id: "+customerId);
+        CustomerRunnerUtil.validateAndGetAuthCustomer(auth, customerId);
+        try{
+            String get_single_product_rating = "select ratings_score from tbl_products_ratings where product_id=? and user_id=? and ratings_status=1";
+            ProductReview review = new ProductReview();
+            jdbcTemplateObject.query(get_single_product_rating, new Object[]{productId, customerId}, (rs, rowNum) -> {
+                review.setRating(rs.getInt("ratings_score"));
+                return null;
+            });
+            
+            String get_single_product_review = "select title, description from tbl_products_review where product_id=? and user_id=? and reviewsid != 3";
+            jdbcTemplateObject.query(get_single_product_review, new Object[]{productId, customerId}, (rs, rowNum) -> {
+                review.setReviewTitle(rs.getString("title"));
+                review.setReviewDetail(rs.getString("description"));
+                return null;
+            });
+
+            Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getProductReview(productId, customerId, auth)).withSelfRel();
+            review.add(selfLink);
+            return review;
+        }
+        catch(DataAccessException e){
+            log.error("An exception occurred while getting product review", e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "An internal error occurred!, pls retry after some time or pls call support");            
+        }
+    }
 
 }

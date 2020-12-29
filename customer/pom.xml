@@ -10,7 +10,7 @@
 	</parent>
 	<groupId>com.dolittle.ecom</groupId>
 	<artifactId>customer-runner</artifactId>
-	<version>v0.4-alpha</version>
+	<version>v0.6.1-alpha</version>
 	<name>customer</name>
 	<description>Demo project for Spring Boot</description>
 
@@ -54,7 +54,7 @@
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-security</artifactId>
-		</dependency>					
+		</dependency>	
 		<dependency>
 			<groupId>mysql</groupId>
 			<artifactId>mysql-connector-java</artifactId>

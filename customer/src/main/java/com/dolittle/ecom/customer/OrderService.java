@@ -23,6 +23,7 @@ import com.dolittle.ecom.customer.bo.general.PromoCode;
 import com.dolittle.ecom.customer.payments.PGIService;
 import com.mysql.cj.util.StringUtils;
 
+import org.apache.commons.lang3.tuple.Pair;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.BeanFactoryAnnotationUtils;
 import org.springframework.context.ApplicationContext;
@@ -72,6 +73,16 @@ public class OrderService {
         log.info("Processing get orders for customer id: "+cuid);
         CustomerRunnerUtil.validateAndGetAuthCustomer(auth, cuid);
 
+        int timeLimit = 0;
+        try{
+            timeLimit = jdbcTemplateObject.queryForObject("select value from variable where vid='order_cancellation_timeline_in_minutes'", Integer.TYPE);
+        }
+        catch(Exception e)
+        {
+            //Do nothing
+        }
+
+        final int cancelTimeout = timeLimit;
         List<OrderSummary> orders = new ArrayList<OrderSummary>();
         String get_orders_sql = "select item_order.oid, said, shipping_cost, tax_percent, price, discounted_price, ios.name, transaction.created_ts, iot.tid "+
                                 "from item_order, item_order_status as ios, item_order_transaction iot, transaction where item_order.cuid=? and item_order.osid = ios.osid "+
@@ -100,12 +111,16 @@ public class OrderService {
                 os.setCreatedTS(order_ts);
                 Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getOrders(cuid, auth)).withSelfRel();
                 os.add(selfLink);
+
+                os.setCancelTimeoutMins(cancelTimeout);
                 return os;
             });
         }catch(DataAccessException e){
             log.error("An exception occurred while getting orders data for customerId: "+cuid, e);
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "An internal error occurred!, pls retry after some time or pls call support");
         }
+
+
         Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getOrders(cuid, auth)).withSelfRel();
         CollectionModel<OrderSummary> result = CollectionModel.of(orders, selfLink);
         return result;
@@ -165,21 +180,43 @@ public class OrderService {
         });
         CustomerRunnerUtil.validateAndGetAuthCustomer(auth, order.getCustomerId());
 
+        String fetch_delivered_order_items_sql = "SELECT o_exe.oiid as oiid FROM package pkg INNER JOIN package_item_order_item_execution p_o_exe "+
+                    "ON p_o_exe.pacid = pkg.pacid AND pkg.pacsid = '1' INNER JOIN item_order_item_execution o_exe ON o_exe.oiiisiid = p_o_exe.oiiisiid INNER JOIN "+
+                    "package_shipping pkg_ship ON pkg_ship.pacid = pkg.pacid AND pkg_ship.pacshsid = 4 WHERE pkg.oid = ? GROUP BY o_exe.isvid, pkg.pacid ORDER BY pkg.pacid";
+        
+        List<Integer> deliveredOrderItemIdList = jdbcTemplateObject.query(fetch_delivered_order_items_sql, new Object[]{orderId}, (rs,rowNum) -> {
+            return rs.getInt("oiid");
+        });
+
         String get_order_items = "select ioi.oiid, ioi.oid, ioi.iid, ioi.isvid, ioi.quantity, ioi.discounted_price, ii.name as item_name, insv.name as variant_name "+
                                 "from item_order_item ioi, inventory_set_variations as insv, item_item as ii "+
                                 "where ii.iid=ioi.iid and insv.isvid = ioi.isvid and ioi.oid=?";
                                 
         List<OrderItem> orderItems = jdbcTemplateObject.query(get_order_items, new Object[]{orderId}, (rs, rowNum) -> {
-            OrderItem oi = new OrderItem(String.valueOf(rs.getInt("iid")), String.valueOf(rs.getInt("isvid")), rs.getInt("quantity"));
+            OrderItem oi = new OrderItem(String.valueOf(rs.getInt("oiid")), String.valueOf(rs.getInt("iid")), String.valueOf(rs.getInt("isvid")), rs.getInt("quantity"));
             oi.setName(rs.getString("item_name"));
             oi.setQtyUnit(rs.getString("variant_name"));
             oi.setPriceAfterDiscount(rs.getBigDecimal("discounted_price"));
+
+            oi.setOrderItemStatus(deliveredOrderItemIdList.contains(rs.getInt("oiid")) ? "delivered" : null);
+            
             Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getOrderDetail(orderId, auth)).withSelfRel();
             oi.add(selfLink);
             return oi;
         });
-        
+
+
+
         order.setOrderItems(orderItems);
+        int timeLimit = 0;
+        try{
+            timeLimit = jdbcTemplateObject.queryForObject("select value from variable where vid='order_cancellation_timeline_in_minutes'", Integer.TYPE);
+        }
+        catch(Exception e)
+        {
+            //Do nothing
+        }
+        order.setCancelTimeoutMins(timeLimit);
         Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getOrderDetail(orderId, auth)).withSelfRel();
         order.add(selfLink);
 
@@ -188,7 +225,8 @@ public class OrderService {
 
     @PostMapping(value = "/orders", produces = "application/hal+json")
     @Transactional
-    public Order createOrder(@RequestBody OrderContext orderContext, Authentication auth)
+    public Order createOrder(@RequestBody OrderContext orderContext,
+                        @RequestParam(value = "coverid", required=true) String coverId, Authentication auth)
     {
         
         CustomerRunnerUtil.validateAndGetAuthCustomer(auth, orderContext.getCustomerId());
@@ -196,7 +234,15 @@ public class OrderService {
         String provider = config.getPgiProviders().get(orderContext.getPaymentOptionId());
         PGIService pgiService = BeanFactoryAnnotationUtils.qualifiedBeanOfType(appContext, PGIService.class, provider);
         String tran_id = orderContext.getTransactionId();
-        String orderString = jdbcTemplateObject.queryForObject("select response from transaction where tid=?", new Object[]{tran_id}, String.class);
+        String orderString = "";
+        Calendar order_ts = Calendar.getInstance();
+        List<Pair<Long, String>> resultPairs = jdbcTemplateObject.query("select created_ts, response from transaction where tid=?", new Object[]{tran_id}, (rs,rowNum)->{
+            return Pair.of(rs.getTimestamp("created_ts").getTime(), rs.getString("response"));
+        });
+
+        orderString = resultPairs.get(0).getRight();
+        order_ts.setTimeInMillis(resultPairs.get(0).getLeft());
+        
         int code = pgiService.validatePaymentResponse(orderString, orderContext.getPgiResponse());
         
         if (code != 0) {
@@ -227,12 +273,12 @@ public class OrderService {
         // 6. Change status of cart items in db to 'executed'
 
         log.info("Beginning to create an order for customer - "+orderContext.getCustomerId());
-        Order preOrder = this.createPreOrder(orderContext, true, auth);
+        Order preOrder = this.createPreOrder(orderContext, true, coverId, auth);
 
         int osid = jdbcTemplateObject.queryForObject("select osid from item_order_status where name='Initial'", Integer.TYPE);
 
         SimpleJdbcInsert jdbcInsert_Order = new SimpleJdbcInsert(jdbcTemplateObject)
-                                            .usingColumns("cuid", "said", "baid", "taxproid", "tax_percent", "shipping_cost", "tax_type", "price", "discounted_price", "pcid", "osid")
+                                            .usingColumns("cuid", "said", "baid", "taxproid", "tax_percent", "shipping_cost", "tax_type", "price", "discounted_price", "pcid", "osid", "order_type")
                                             .withTableName("item_order")
                                             .usingGeneratedKeyColumns("oid");
 
@@ -248,6 +294,7 @@ public class OrderService {
         parameters_insert_order.put("discounted_price", preOrder.getDiscountedTotal());
         parameters_insert_order.put("pcid", preOrder.getAppliedPromoCodeIdList().size() > 0? preOrder.getAppliedPromoCodeIdList().get(0) : null);
         parameters_insert_order.put("osid", osid);
+        parameters_insert_order.put("order_type", 3);
 
         Number oid = jdbcInsert_Order.executeAndReturnKey(parameters_insert_order);
 
@@ -340,19 +387,23 @@ public class OrderService {
         //     notifications.sendEmailNotification(customer.getEmail(), message);
         // }
         // notifications.sendSMSNotification(customer.getMobile(), message);
+        int timeLimit = jdbcTemplateObject.queryForObject("select value from variable where vid='order_cancellation_timeline_in_minutes'", Integer.TYPE);
+        order.setCancelTimeoutMins(timeLimit);
+        order.setCreatedTS(order_ts);
         return order;
     }
 
     @PostMapping(value = "/orders/preorders", produces = "application/hal+json")
     @Transactional
     public Order createPreOrder(@RequestBody OrderContext context , 
-                @RequestParam(value="skiptransaction", required=false, defaultValue = "false") boolean skipTransaction, Authentication auth)
+                @RequestParam(value="skiptransaction", required=false, defaultValue = "false") boolean skipTransaction,
+                @RequestParam(value = "coverid", required=true) String coverId, Authentication auth)
     {
         log.info("Beginning to create a preorder for customer - "+context.getCustomerId());
         CustomerRunnerUtil.validateAndGetAuthCustomer(auth, context.getCustomerId());
         Order order = new Order();
         order.setCustomerId(context.getCustomerId());
-        CollectionModel<CartItem> cartItemsModel = cartService.getCartItems(context.getCustomerId(), auth);
+        CollectionModel<CartItem> cartItemsModel = cartService.getCartItems(context.getCustomerId(), coverId, auth);
         cartItemsModel.forEach((cartItem) -> {
             order.addOrderItem(cartItem.getOrderItem());
             log.debug("Adding cart item to order "+cartItem.toString());
@@ -385,12 +436,12 @@ public class OrderService {
             private BigDecimal minOrderAmount;
         }
 
-        String fetch_shipping_charges_sql = "select shipping_cost, min_order_amount from country where ctid='1'";
-        OrderCharge shippingCharge = jdbcTemplateObject.queryForObject(fetch_shipping_charges_sql, (rs, rowNum)->{
+        String fetch_shipping_charges_sql = "select shipping_cost, coalesce(min_order_amount, 0) as applicableBelowAmount from coverage where coverid=?";
+        OrderCharge shippingCharge = jdbcTemplateObject.queryForObject(fetch_shipping_charges_sql, new Object[]{coverId}, (rs, rowNum)->{
             OrderCharge oc = new OrderCharge();
             oc.cost = rs.getBigDecimal("shipping_cost");
             oc.name = "shipping charge";
-            oc.minOrderAmount = rs.getBigDecimal("min_order_amount");
+            oc.minOrderAmount = rs.getBigDecimal("applicableBelowAmount");
             return oc;
         });
 
@@ -427,7 +478,7 @@ public class OrderService {
             sa.setLastName(rs.getString("last_name"));
             sa.setState(rs.getString("state"));
             sa.setStateId(rs.getInt("stid"));
-            Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).createPreOrder(context, false, auth)).withSelfRel();
+            Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).createPreOrder(context, false, coverId, auth)).withSelfRel();
             sa.add(selfLink);
             return sa;
         });
@@ -447,7 +498,7 @@ public class OrderService {
             sa.setLastName(rs.getString("last_name"));
             sa.setState(rs.getString("state"));
             sa.setStateId(rs.getInt("stid"));
-            Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).createPreOrder(context, false, auth)).withSelfRel();
+            Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).createPreOrder(context, false, coverId, auth)).withSelfRel();
             sa.add(selfLink);
             return sa;
         });
@@ -506,7 +557,7 @@ public class OrderService {
 
         //     order.setTransaction(transaction);
         // }
-        Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).createPreOrder(context, false, auth)).withSelfRel();
+        Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).createPreOrder(context, false, coverId, auth)).withSelfRel();
         order.add(selfLink);
         return order;
     }
@@ -517,14 +568,27 @@ public class OrderService {
             log.info("Processing request to cancel order Id: "+orderId);
             Number customerId = jdbcTemplateObject.queryForObject("select cuid from item_order where oid=?", new Object[]{orderId}, Integer.TYPE);
             CustomerRunnerUtil.validateAndGetAuthCustomer(auth, customerId.toString());
-            String currentStatus = jdbcTemplateObject.queryForObject("select ios.name from item_order io, item_order_status ios where oid=? and io.osid = ios.osid",
-                                                                 new Object[]{orderId}, String.class);
-            if (currentStatus.trim().equals("Initial") || currentStatus.equals("Executing")){
+            int timeLimit = 0;
+            try{
+                timeLimit = jdbcTemplateObject.queryForObject("select value from variable where vid='order_cancellation_timeline_in_minutes'", Integer.TYPE);
+            }
+            catch(Exception e)
+            {
+                //Do nothing
+            }
+            // Has timelimit expired?
+            
+            String check_timeLimit_elapse_sql = "select transaction.created_ts +"+timeLimit*60+" > current_timestamp() from item_order io, item_order_status ios, item_order_transaction iot, transaction "+
+                                            "where io.oid=? and io.osid = ios.osid and iot.oid = io.oid and transaction.tid = iot.tid";
+
+            int isInTime = jdbcTemplateObject.queryForObject(check_timeLimit_elapse_sql,
+                                                                 new Object[]{orderId}, Integer.TYPE);
+            if (isInTime > 0){
                 jdbcTemplateObject.update("update item_order set osid = (select osid from item_order_status where name='Cancel Request') where oid=?", orderId);
             }
             else{
                 log.error("Invalid State of order. Order can not be cancelled in this state. OrderId: "+orderId);
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Can not cancel order in its current state. Request processing aborted");
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Can not cancel order after "+timeLimit+" min from placing the order");
             }
         }
         catch(DataAccessException e){

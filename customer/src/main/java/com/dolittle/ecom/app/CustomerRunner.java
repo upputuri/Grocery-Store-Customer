@@ -9,6 +9,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import com.dolittle.ecom.app.bo.AddressTypes;
 import com.dolittle.ecom.app.bo.Subscriptions;
 import com.dolittle.ecom.app.bo.Variables;
 import com.dolittle.ecom.app.security.GrocPasswordEncoder;
@@ -429,8 +430,24 @@ public class CustomerRunner implements CommandLineRunner{
 		
 		Variables variables = new Variables();
 		variables.setVariables(vars);
-		Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getVariables(null)).withSelfRel();
+		Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getVariables()).withSelfRel();
 		variables.add(selfLink);
 		return variables;
 	}	
+
+	@GetMapping(value="/application/addresstypes", produces="application/hal+json")
+	public AddressTypes getAddressTypes() {
+		log.info("Processing request to get address types ");
+		Map<String, String> typesMap = new HashMap<String, String>(0);
+		jdbcTemplate.query("select addtid, name from address_type", (rs,rowNum) -> {
+			typesMap.put(String.valueOf(rs.getInt("addtid")), rs.getString("name"));
+			return null;
+		});
+
+		AddressTypes types = new AddressTypes();
+		types.setTypes(typesMap);
+		Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getAddressTypes()).withSelfRel();
+		types.add(selfLink);
+		return types;
+	}
 }

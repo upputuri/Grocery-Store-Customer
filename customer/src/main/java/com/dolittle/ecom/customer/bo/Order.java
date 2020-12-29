@@ -33,6 +33,7 @@ public @Data class Order extends RepresentationModel<Order>{
     private List<String> appliedPromoCodeIdList = new ArrayList<String>();
     @JsonProperty(access = Access.READ_ONLY)    
     private Transaction transaction;
+    private int cancelTimeoutMins;
     @JsonProperty(access = Access.READ_ONLY)    
     private Invoice invoice;
     @JsonProperty(access = Access.READ_ONLY)

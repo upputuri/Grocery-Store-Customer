@@ -8,6 +8,7 @@ import lombok.Data;
 public @Data class OrderContext {
     private String customerId;
     private List<String> promoCodes = new ArrayList<String>();
+    private String coverId;
     private String deliveryAddressId;
     private String billingAddressId;
     private String paymentOptionId;

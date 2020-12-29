@@ -1,13 +1,18 @@
 package com.dolittle.ecom.app.security;
 
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 import com.dolittle.ecom.app.AppUser;
 import com.dolittle.ecom.app.security.bo.OTPRequest;
 import com.dolittle.ecom.app.util.CustomerRunnerUtil;
+import com.dolittle.ecom.app.util.NotificationsService;
 import com.dolittle.ecom.customer.bo.Customer;
 import com.dolittle.ecom.customer.bo.LoginSession;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mail.SimpleMailMessage;
@@ -30,6 +35,9 @@ public class CustomerAccountService {
     
     @Autowired
     private JavaMailSender mailSender;
+
+    @Autowired
+    private NotificationsService notifications;
 
     @Value("${spring.mail.username}")
     private String emailFromAddress;
@@ -63,12 +71,37 @@ public class CustomerAccountService {
     }
 
     @PostMapping(value = "/customers/me/otptokens")
-    public void sendOTP(@RequestBody OTPRequest otpRequest, Authentication auth)
+    public void sendPasswordResetOTP(@RequestBody OTPRequest otpRequest, Authentication auth)
     {
-        log.info("Processing send OTP request");
+        log.info("Processing OTP request for password reset");
         
         Customer customer = CustomerRunnerUtil.fetchAuthCustomer(auth);
+		if (otpRequest.getType().equals("mobile"))
+		{
+			Pattern PHONE_NUMBER_REGEX = Pattern.compile("^\\d{10}$");
+			if (otpRequest.getTarget() != null) {
+				Matcher phoneMatcher = PHONE_NUMBER_REGEX.matcher(otpRequest.getTarget());
+				if (!phoneMatcher.find()) {
+					log.error("Invalid mobile number supplied for password reset request");
+					throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid Phone number");
+				}
+			}else{
+				log.error("Invalid mobile number supplied for password reset request");
+				throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid Phone number");
+			}
 
+			//Ensure account exists with this mobile
+			int cuid = 0;
+			try{
+				cuid = jdbcTemplateObject.queryForObject("select cuid from customer where mobile=?", new Object[]{otpRequest.getTarget()}, Integer.TYPE);
+			}catch(EmptyResultDataAccessException e){
+				log.error("No account registered with this mobile number");
+				throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No account registered with this mobile number");
+            }
+
+            String otp = CustomerRunnerUtil.generateOTP(6).toString();
+            // notifications.sendNotification(request, customerId, auth);
+        }
         if (otpRequest.getType().equals("email"))
         {
             //Send email OTP to customer
