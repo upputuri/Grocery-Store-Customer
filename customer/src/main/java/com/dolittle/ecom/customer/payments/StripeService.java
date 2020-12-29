@@ -18,10 +18,10 @@ public @Data class StripeService implements PGIService {
 
     private final String id = "stripe";
 
-    @Value("${stripekey}")
+    // @Value("${stripekey}")
     private String key;
 
-    @Value("${stripesecret}")
+    // @Value("${stripesecret}")
     private String secret;
 
     @Override
