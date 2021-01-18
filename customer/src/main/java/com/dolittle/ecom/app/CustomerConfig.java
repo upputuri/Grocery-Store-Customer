@@ -12,4 +12,5 @@ import lombok.Data;
 public @Data class CustomerConfig {
     private Map<String, String> pgiProviders;
     private String productFilters;
+    private String membershipPaymentProvider;
 }

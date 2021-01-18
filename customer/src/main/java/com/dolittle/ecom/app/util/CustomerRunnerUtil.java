@@ -60,7 +60,7 @@ public class CustomerRunnerUtil {
     {
         try{
             Customer c = (Customer)((AppUser)auth.getPrincipal()).getQualifiedUser();
-            if (!customerId.equals(c.getId())) {
+            if (customerId == null || !customerId.equals(c.getId())) {
                 throw new Exception();
             }
             return c;
@@ -147,8 +147,9 @@ public class CustomerRunnerUtil {
 
     public static void main(String st[])
     {
-        // PasswordEncoder encoder = new GrocPasswordEncoder();
-        // System.out.println(encoder.encode("Dolittle123"));
+        PasswordEncoder encoder = new GrocPasswordEncoder();
+        System.out.println(encoder.encode("Password123"));
+        // String s = "\"razorpay_payment_id\":\"pay_GPqgpeEMBrChat\",\"razorpay_order_id\":\"order_GPqgcoSjQDp6iS\",\"razorpay_signature\":\"2fef0354b07461ce5ab7525392d66a9b78df6aa6ab67d57f36ece164bab5b909\",\"org_logo\":\"\",\"org_name\":\"Razorpay Software Private Ltd\",\"checkout_logo\":\"https://dashboard-activation.s3.amazonaws.com/org_100000razorpay/checkout_logo/phpnHMpJe\",\"custom_branding\":false";
         // Pattern csv_regex = Pattern.compile("(?:^|,)\s*(?:(?:(?=\")\"([^\"].*?)\")|(?:(?!\")(.*?)))(?=,|$)", Pattern.CASE_INSENSITIVE);
         // Matcher csv_matcher = csv_regex.matcher("abc,def,aldkj,slfkjsf");
        

@@ -15,6 +15,7 @@ public @Data class Customer extends RepresentationModel<Customer>
     private String uid;
     private String fName;
     private String lName;
+    private String gender;
     private String email;
     private String altEmail;
     private String dob;
@@ -22,6 +23,7 @@ public @Data class Customer extends RepresentationModel<Customer>
     private String altMobile;
     private String password;
     private String image;
+    private String membershipId;
     private List<ShippingAddress> shippingAddresses = new ArrayList<ShippingAddress>();
 
     // public Customer(String id, String uid)

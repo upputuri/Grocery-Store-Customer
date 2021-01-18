@@ -64,7 +64,7 @@ public class AppUserDetailsService implements UserDetailsService {
         AppUser appUser=null;
         if (userType.equals("C")) {
 
-            String get_customer_profile_query = "select c.uid, c.cuid, c.email, c.password, c.fname, c.lname, c.dob, c.mobile, c.alt_email, c.alt_mobile, cs.name as user_status from customer c, "+
+            String get_customer_profile_query = "select c.uid, c.cuid, c.email, c.password, c.fname, c.lname, c.genderid, c.dob, c.mobile, c.alt_email, c.alt_mobile, cs.name as user_status from customer c, "+
                                         "customer_status cs where (c.mobile = ? or c.email = ?) and cs.custatusid=c.custatusid";
             
             try{
@@ -82,6 +82,7 @@ public class AppUserDetailsService implements UserDetailsService {
                     c.setId(String.valueOf(rs.getInt("cuid")));
                     c.setFName(rs.getString("fname"));
                     c.setLName(rs.getString("lname"));
+                    c.setGender(rs.getInt("genderid") == 1 ? "male" : "female");
                     c.setEmail(rs.getString("email"));
                     c.setDob(rs.getString("dob"));
                     c.setAltEmail(rs.getString("alt_email"));

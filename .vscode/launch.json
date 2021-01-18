@@ -61,7 +61,7 @@
                 "dolittlesmsapinotificationroute": "2",
                 "dolittlesmsapisender": "VEGITC",
                 "passwordsalt": "K<47`5n9~8H5`*^Ks.>ie5&",
-                "pgiprovider": "stripe"
+                "pgiprovider": "razorpay"
             }
         }
     ]

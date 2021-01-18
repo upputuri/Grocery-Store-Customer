@@ -13,14 +13,8 @@ public @Data class Transaction extends RepresentationModel<Transaction>{
     private String paymentOrderId;
     //Amount in INR in paisa
     private int amount = 0;
-    private Object providerResponse;
+    private String clientResponse;
     private String statusId;
     private String paymentOptionId;
     private Date ts;
-
-    public Transaction(String id)
-    {
-        super();
-        this.id = id;
-    }
 }

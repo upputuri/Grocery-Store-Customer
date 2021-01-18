@@ -7,8 +7,10 @@ import com.dolittle.ecom.app.AppUser;
 import com.dolittle.ecom.app.security.bo.OTPRequest;
 import com.dolittle.ecom.app.util.CustomerRunnerUtil;
 import com.dolittle.ecom.app.util.NotificationsService;
+import com.dolittle.ecom.customer.CustomerDataService;
 import com.dolittle.ecom.customer.bo.Customer;
 import com.dolittle.ecom.customer.bo.LoginSession;
+import com.dolittle.ecom.customer.bo.Membership;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -39,6 +41,9 @@ public class CustomerAccountService {
     @Autowired
     private NotificationsService notifications;
 
+    @Autowired
+    private CustomerDataService customerInfo;
+
     @Value("${spring.mail.username}")
     private String emailFromAddress;
     
@@ -54,6 +59,8 @@ public class CustomerAccountService {
         String get_cart_count_sql = "select count(*) from cart_item where cartid=(select cartid from cart where cuid=?) "+
         "and cartisid=(select cartisid from cart_item_status where name='Active')";
         int cartItemCount = jdbcTemplateObject.queryForObject(get_cart_count_sql, new Object[]{customer.getId()}, Integer.TYPE);
+        Membership membership = customerInfo.getCustomerMembership(customer.getId(), auth);
+        customer.setMembershipId(membership.getMembershipId());
         // TODO: Implement token/sessionid to avoid sending password each time.  
         // //A customer object is available
         // String update_old_sessions_sql = "update auser_session set ussid=2 where uid=?";

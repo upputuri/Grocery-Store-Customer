@@ -528,7 +528,8 @@ public class OrderService {
             parameters_insert_transaction.put("discount_amt", order.getTotalDiscountValue());        
             
             Number tran_id = jdbcInsert_transaction.executeAndReturnKey(parameters_insert_transaction);
-            Transaction transaction = new Transaction(tran_id.toString());
+            Transaction transaction = new Transaction();
+            transaction.setId(tran_id.toString());
             transaction.setAmount(transactionAmount);
             transaction.setPaymentOptionId(context.getPaymentOptionId());
             

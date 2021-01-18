@@ -9,6 +9,8 @@ import com.dolittle.ecom.app.AppUser;
 import com.dolittle.ecom.app.util.CustomerRunnerUtil;
 import com.dolittle.ecom.customer.bo.Customer;
 import com.dolittle.ecom.customer.bo.CustomerQuery;
+import com.dolittle.ecom.customer.bo.MPlan;
+import com.dolittle.ecom.customer.bo.Membership;
 import com.dolittle.ecom.customer.bo.ProductReview;
 import com.dolittle.ecom.customer.bo.ShippingAddress;
 
@@ -93,7 +95,7 @@ public class CustomerDataService {
             //Now insert a customer record
             int custatusid = jdbcTemplateObject.queryForObject("select custatusid from customer_status where name = 'Email Unverified'", Integer.TYPE);
             SimpleJdbcInsert customerJdbcInsert = new SimpleJdbcInsert(jdbcTemplateObject)
-                                                    .usingColumns("uid", "fname", "lname", "email", "password", "mobile", "alt_mobile", "custatusid")
+                                                    .usingColumns("uid", "fname", "lname", "genderid", "email", "password", "mobile", "alt_mobile", "custatusid")
                                                     .withTableName("customer")
                                                     .usingGeneratedKeyColumns("cuid");
             Map<String, Object> customerParams = new HashMap<String, Object>(1);
@@ -105,6 +107,7 @@ public class CustomerDataService {
             customerParams.put("alt_mobile", customer.getAltMobile());       
             customerParams.put("password", passwordHash);
             customerParams.put("custatusid", custatusid);
+            customerParams.put("genderid", customer.getGender() !=null ? (customer.getGender().equals("male") ? 1 : 2) : null);
 
             Number cuid = customerJdbcInsert.executeAndReturnKey(customerParams);
             
@@ -473,6 +476,49 @@ public class CustomerDataService {
         catch(DataAccessException e){
             log.error("An exception occurred while getting product review", e);
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "An internal error occurred!, pls retry after some time or pls call support");            
+        }
+    }
+
+    @GetMapping("/customers/{customerId}/membership")
+    public Membership getCustomerMembership(@PathVariable String customerId, Authentication auth) {
+        try{
+            log.info("Processing request to get membership for customer Id"+customerId);
+            CustomerRunnerUtil.validateAndGetAuthCustomer(auth, customerId.toString());
+            String fetch_membership = "select cwp.cuwapaid, cwp.tid, cwp.start_date, cwp.end_date, cwp.validity, cwp.duration, cwp.min_purchase_permonth, cwp.max_purchase_permonth, wp.wapaid, wp.name, wp.description, wp.short_desc "+
+                                    "from customer_wallet_pack cwp inner join wallet_pack wp on (cwp.wapaid = wp.wapaid and cwp.cuwapasid = 1 and cwp.cuid = ?) "+
+                                    "inner join wallet_pack_category wpc on (wp.wapacatid = wpc.wapacatid) ";
+
+            Membership membership = jdbcTemplateObject.queryForObject(fetch_membership, new Object[]{customerId}, (rs, rowNum) -> {
+                Membership mship = new Membership();
+                mship.setMembershipId(String.valueOf(rs.getInt("cuwapaid")));
+                mship.setCustomerId(customerId);
+                MPlan plan = new MPlan();
+                plan.setPlanId(String.valueOf(rs.getInt("wapaid")));
+                plan.setPlanName(rs.getString("name"));
+                plan.setValidityInYears(rs.getInt("duration"));
+                plan.setDescription(rs.getString("description"));
+                plan.setShortDescription(rs.getString("short_desc"));
+                plan.setCategoryId(String.valueOf(rs.getInt("wapaid")));
+                plan.setMaxPurchaseAmount(rs.getBigDecimal("max_purchase_permonth"));
+                plan.setMinPurchaseAmount(rs.getBigDecimal("min_purchase_permonth"));
+                mship.setPlan(plan);
+                return mship;
+            });
+
+            Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getCustomerMembership(customerId, auth)).withSelfRel();
+            membership.add(selfLink);
+            return membership;
+        }
+        catch(EmptyResultDataAccessException e){
+            Membership membership = new Membership();
+            membership.setCustomerId(customerId);
+            Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getCustomerMembership(customerId, auth)).withSelfRel();
+            membership.add(selfLink);
+            return membership;
+        }
+        catch(DataAccessException e){
+            log.error("An exception occurred while getting membership for customer id"+customerId, e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "An internal error occurred!, pls retry after some time or pls call support");
         }
     }
 

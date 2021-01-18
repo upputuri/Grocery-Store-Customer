@@ -12,7 +12,6 @@ import java.util.stream.Collectors;
 import com.dolittle.ecom.app.bo.AddressTypes;
 import com.dolittle.ecom.app.bo.Subscriptions;
 import com.dolittle.ecom.app.bo.Variables;
-import com.dolittle.ecom.app.security.GrocPasswordEncoder;
 import com.dolittle.ecom.app.security.bo.OTPRequest;
 import com.dolittle.ecom.app.sms.SMSServiceProvider;
 import com.dolittle.ecom.app.util.CustomerRunnerUtil;
@@ -103,6 +102,7 @@ public class CustomerRunner implements CommandLineRunner{
 			}
 		};
 	}	
+
 
 	// @Bean
 	// public PasswordEncoder getPasswordEncoder() {

@@ -11,8 +11,10 @@ import org.springframework.stereotype.Component;
 @Component
 public class GrocPasswordEncoder implements PasswordEncoder {
 
-    @Value("${passwordsalt}")
-    private String PASSWORD_SALT;
+    // @Value("${passwordsalt}")
+    // private String PASSWORD_SALT;
+
+    private String PASSWORD_SALT = "K<47`5n9~8H5`*^Ks.>ie5&";
 
     @Override
     public String encode(CharSequence rawPassword) {
