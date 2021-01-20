@@ -95,13 +95,13 @@ public @Data class MembershipService{
     public CollectionModel<MPlan> getPlansInCategory(@RequestParam(value="category", required=true) String categoryId) {
         try{
             log.info("Processing request to get membership plans in category Id "+categoryId);
-            String fetch_membership = "select wp.wapaid, wp.name from wallet_pack wp, wallet_pack_category wpc where wp.wapacatid = wpc.wapacatid and wpc.wapacatsid = 1 and wp.wapasid = 1 and wpc.wapacatid = ?";
+            String fetch_membership = "select wp.wapaid, wp.name as plan_name, wpc.name as cat_name from wallet_pack wp, wallet_pack_category wpc where wp.wapacatid = wpc.wapacatid and wpc.wapacatsid = 1 and wp.wapasid = 1 and wpc.wapacatid = ?";
 
             List<MPlan> mPlanCategories = jdbcTemplateObject.query(fetch_membership, new Object[]{categoryId}, (rs, rowNum) -> {
                 MPlan plan = new MPlan();
                 plan.setPlanId(String.valueOf(rs.getInt("wapaid")));
-                plan.setPlanName(rs.getString("name"));
-
+                plan.setPlanName(rs.getString("plan_name"));
+                plan.setCategoryName(rs.getString("cat_name"));
                 Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getPlan(String.valueOf(rs.getInt("wapaid")))).withSelfRel();
                 plan.add(selfLink);
                 return plan;
@@ -121,13 +121,14 @@ public @Data class MembershipService{
     public MPlan getPlan(@PathVariable String planId) {
         try{
             log.info("Processing request to get membership plan details of plan Id "+planId);
-            String fetch_membership = "select wp.wapaid, wp.name, wp.description, wp.short_desc, wp.price, wp.one_time_disc_per, wp.validity, wp.min_purchase_permonth, wp.max_purchase_permonth, wpc.wapacatid, wpc.name as category_name  "+
+            String fetch_membership = "select wp.wapaid, wp.name as plan_name, wpc.name as cat_name, wp.description, wp.short_desc, wp.price, wp.one_time_disc_per, wp.validity, wp.min_purchase_permonth, wp.max_purchase_permonth, wpc.wapacatid, wpc.name as category_name  "+
                                     "from wallet_pack wp, wallet_pack_category wpc where wapasid = 1 and wpc.wapacatsid=1 and wpc.wapacatid=wp.wapacatid and wp.wapaid= ? ";
 
             MPlan mPlan = jdbcTemplateObject.queryForObject(fetch_membership, new Object[]{planId}, (rs, rowNum) -> {
                 MPlan plan = new MPlan();
                 plan.setPlanId(String.valueOf(rs.getInt("wapaid")));
-                plan.setPlanName(rs.getString("name"));
+                plan.setPlanName(rs.getString("plan_name"));
+                plan.setCategoryName(rs.getString("cat_name"));
                 plan.setValidityInYears(rs.getInt("validity"));
                 plan.setDescription(rs.getString("description"));
                 plan.setShortDescription(rs.getString("short_desc"));

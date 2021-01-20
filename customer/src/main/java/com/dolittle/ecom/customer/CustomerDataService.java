@@ -59,7 +59,8 @@ public class CustomerDataService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Missing mandatory inputs in register request, check for email and password");
         //Check if customer exists
         try{
-            String fetch_customer_sql = "select cu.cuid from customer cu where (length(cu.mobile) > 0 and cu.mobile=?) or (length(cu.email) > 0 and cu.email=?)";
+            String fetch_customer_sql = "select cu.cuid from customer cu where (length(cu.mobile) > 0 and cu.mobile=?) or (length(cu.email) > 0 and cu.email=?) "+
+                                    "and cu.custatusid != (select custatusid from customer_status where name = 'Deleted')";
             customer = jdbcTemplateObject.queryForObject(fetch_customer_sql, new Object[]{customer.getMobile(), customer.getEmail()}, (rs, rowNum) -> {
                 // If control comes here, that means there's a customer record already in db with same email.
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "An account with the email/phone already exists");

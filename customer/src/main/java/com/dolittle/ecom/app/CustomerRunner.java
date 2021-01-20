@@ -259,20 +259,20 @@ public class CustomerRunner implements CommandLineRunner{
 	}
 
 	@GetMapping(value="/application/coverimages", produces = "application/hal+json")
-	public CollectionModel<CoverImage> getCoverImages()
+	public CollectionModel<CoverImage> getCoverImages(@RequestParam(value = "coverid", required=true) String coverId)
 	{
 		log.info("Processing get cover images");
 
-		String cover_images_sql = "SELECT name, cover_image.rank FROM cover_image WHERE coisid = '1' and ((curdate()>= from_time and curdate() <= to_time) "+
+		String cover_images_sql = "SELECT name, cover_image.rank FROM cover_image WHERE coisid = '1' and cityid=? and ((curdate()>= from_time and curdate() <= to_time) "+
 							"OR (from_time is null and to_time is null) OR (curdate()>=from_time and to_time is null)) order by cover_image.rank";
 		
 		List<CoverImage> images = new ArrayList<CoverImage>();
 		try{
-			images = jdbcTemplate.query(cover_images_sql, (rs, rowNum) -> {
+			images = jdbcTemplate.query(cover_images_sql, new Object[]{coverId}, (rs, rowNum) -> {
 				CoverImage ci = new CoverImage();
 				ci.image = rs.getString("name");
 				ci.rank = rs.getInt("rank");
-				Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getCoverImages()).withSelfRel();
+				Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getCoverImages(coverId)).withSelfRel();
 				ci.add(selfLink);
 				return ci;
 			});
@@ -282,7 +282,7 @@ public class CustomerRunner implements CommandLineRunner{
 			log.error("An SQL exception occurred", e);
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "An internal error occurred!, pls retry after some time or pls call support");
 		}
-		Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getCoverImages()).withSelfRel();
+		Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getCoverImages(coverId)).withSelfRel();
 
 		return CollectionModel.of(images).add(selfLink);
 	}
