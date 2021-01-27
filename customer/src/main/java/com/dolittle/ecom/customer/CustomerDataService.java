@@ -59,8 +59,8 @@ public class CustomerDataService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Missing mandatory inputs in register request, check for email and password");
         //Check if customer exists
         try{
-            String fetch_customer_sql = "select cu.cuid from customer cu where (length(cu.mobile) > 0 and cu.mobile=?) or (length(cu.email) > 0 and cu.email=?) "+
-                                    "and cu.custatusid != (select custatusid from customer_status where name = 'Deleted')";
+            String fetch_customer_sql = "select cu.cuid from customer cu where cu.custatusid != (select custatusid from customer_status where name = 'Deleted') and "+
+                                    "((length(cu.mobile) > 0 and cu.mobile=?) or (length(cu.email) > 0 and cu.email=?)) ";
             customer = jdbcTemplateObject.queryForObject(fetch_customer_sql, new Object[]{customer.getMobile(), customer.getEmail()}, (rs, rowNum) -> {
                 // If control comes here, that means there's a customer record already in db with same email.
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "An account with the email/phone already exists");
@@ -284,11 +284,12 @@ public class CustomerDataService {
             //                 "where name like 'active'))";   
             log.info("Processing request to add new address to customer Id {}", customerId);
             CustomerRunnerUtil.validateAndGetAuthCustomer(auth, customerId);
+            int addressCount = getCustomerAddresses(customerId, auth).getContent().size();
             String sql = "select sasid from customer_shipping_address_status where name = 'Active'";
             int sasid = jdbcTemplateObject.queryForObject(sql, Integer.TYPE);
 
             SimpleJdbcInsert simpleInsert = new SimpleJdbcInsert(jdbcTemplateObject)
-                                            .usingColumns("cuid","first_name","last_name","line1","line2","city","zip_code","mobile", "stid", "sasid")
+                                            .usingColumns("cuid","first_name","last_name","line1","line2","city","zip_code","mobile", "stid", "sasid", "default_address")
                                             .withTableName("customer_shipping_address")
                                             .usingGeneratedKeyColumns("said");
             
@@ -303,6 +304,11 @@ public class CustomerDataService {
             parameters.put("zip_code", address.getZipcode());
             parameters.put("mobile", address.getPhoneNumber());
             parameters.put("sasid", sasid);
+            boolean isDefault = address.isDefault();
+            if (!isDefault && addressCount <= 0){
+                isDefault = true;
+            }
+            parameters.put("default_address", isDefault ? 1 : 0);
 
             Number id = simpleInsert.executeAndReturnKey(parameters);
             address.setId(String.valueOf(id));
@@ -485,7 +491,7 @@ public class CustomerDataService {
         try{
             log.info("Processing request to get membership for customer Id"+customerId);
             CustomerRunnerUtil.validateAndGetAuthCustomer(auth, customerId.toString());
-            String fetch_membership = "select cwp.cuwapaid, cwp.tid, cwp.start_date, cwp.end_date, cwp.validity, cwp.duration, cwp.min_purchase_permonth, cwp.max_purchase_permonth, wp.wapaid, wp.name, wp.description, wp.short_desc "+
+            String fetch_membership = "select cwp.cuwapaid, cwp.tid, cwp.start_date, cwp.end_date, cwp.validity, cwp.duration, cwp.min_purchase_permonth, cwp.max_purchase_permonth, wpc.name as category_name, wp.wapaid, wp.name, wp.description, wp.short_desc "+
                                     "from customer_wallet_pack cwp inner join wallet_pack wp on (cwp.wapaid = wp.wapaid and cwp.cuwapasid = 1 and cwp.cuid = ?) "+
                                     "inner join wallet_pack_category wpc on (wp.wapacatid = wpc.wapacatid) ";
 
@@ -496,6 +502,7 @@ public class CustomerDataService {
                 MPlan plan = new MPlan();
                 plan.setPlanId(String.valueOf(rs.getInt("wapaid")));
                 plan.setPlanName(rs.getString("name"));
+                plan.setCategoryName(rs.getString("category_name"));
                 plan.setValidityInYears(rs.getInt("duration"));
                 plan.setDescription(rs.getString("description"));
                 plan.setShortDescription(rs.getString("short_desc"));

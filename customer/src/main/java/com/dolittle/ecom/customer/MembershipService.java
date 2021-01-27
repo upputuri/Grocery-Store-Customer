@@ -257,8 +257,8 @@ public @Data class MembershipService{
                 
                 SimpleJdbcInsert jdbcInsert_transaction = new SimpleJdbcInsert(jdbcTemplateObject)
                                     .usingColumns("cuid", "wapaid", "tid", "start_date", "end_date", "price", "validity", "min_purchase_permonth", "max_purchase_permonth",
-                                                    "cuwapasid", "mem_fname", "mem_mname", "mem_fullname", "mem_email", "mem_dob", "mem_gender", "mem_mob", "mem_alt_mob", "mem_pre_addr", "mem_pre_pincode", "mem_photo", "mem_aadhar_fph", "mem_aadhar_bph",
-                                                    "nom_fname", "nom_mname", "nom_fullname", "nom_email", "nom_dob", "nom_gender", "nom_mob", "nom_alt_mob", "nom_photo", "nom_aadhar_fph", "nom_aadhar_bph")
+                                                    "cuwapasid", "mem_fname", "mem_lname", "mem_fullname", "mem_email", "mem_dob", "mem_gender", "mem_mob", "mem_alt_mob", "mem_pre_addr", "mem_pre_pincode", "mem_photo", "mem_aadhar_fph", "mem_aadhar_bph",
+                                                    "nom_fname", "nom_lname", "nom_fullname", "nom_email", "nom_dob", "nom_gender", "nom_mob", "nom_alt_mob", "nom_photo", "nom_aadhar_fph", "nom_aadhar_bph")
                                     .withTableName("customer_wallet_pack");
                 Map<String, Object> parameters_insert_transaction = new HashMap<String, Object>(1);
                 parameters_insert_transaction.put("cuid", membershipRequest.getCustomerId());
@@ -279,7 +279,7 @@ public @Data class MembershipService{
                 parameters_insert_transaction.put("cuwapasid", 2); // Pending
 
                 parameters_insert_transaction.put("mem_fname", member.getFName());
-                parameters_insert_transaction.put("mem_mname", member.getLName());
+                parameters_insert_transaction.put("mem_lname", member.getLName());
                 parameters_insert_transaction.put("mem_fullname", member.getFName()+ " " +member.getLName());
                 parameters_insert_transaction.put("mem_dob", member.getDob());
                 parameters_insert_transaction.put("mem_gender", member.getGender());
@@ -293,7 +293,7 @@ public @Data class MembershipService{
                 parameters_insert_transaction.put("mem_aadhar_bph", member.getAdhaarBackImg());
 
                 parameters_insert_transaction.put("nom_fname", nominee.getFName());
-                parameters_insert_transaction.put("nom_mname", nominee.getLName());
+                parameters_insert_transaction.put("nom_lname", nominee.getLName());
                 parameters_insert_transaction.put("nom_fullname", nominee.getFName()+ " " +nominee.getLName());
                 parameters_insert_transaction.put("nom_email", nominee.getEmail());
                 parameters_insert_transaction.put("nom_dob", nominee.getDob());

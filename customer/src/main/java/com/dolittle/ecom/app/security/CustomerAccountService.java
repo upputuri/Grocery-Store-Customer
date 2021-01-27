@@ -109,8 +109,8 @@ public class CustomerAccountService {
         String password = overwrite.getPassword();
         String passwordHash = passwordEncoder.encode(password);
         if (otp != null && otp.length() > 0 && password != null && password.length() > 0) {
-            String password_reset_sql = "update customer set data=null, password=? where mobile = ? and data = ? and custatusid = "+
-                "(select custatusid from customer_status where (name = 'Active' or name = 'Email Verified'))";
+            String password_reset_sql = "update customer set data=null, password=? where mobile = ? and data = ? and custatusid in "+
+                "(select custatusid from customer_status where (name = 'Active' or name = 'Email UnVerified'))";
             int rows = jdbcTemplateObject.update(password_reset_sql, new Object[] {passwordHash, mobile, otp});
             if (rows == 0){
                 String msg = "Either the OTP is invalid or no account is in a state to accept OTP based password reset request";
@@ -148,7 +148,7 @@ public class CustomerAccountService {
             String otp;
 			try{
                 String get_customer_id = "select c.cuid from customer c, "+
-                    "customer_status cs where c.mobile = ? and cs.custatusid=c.custatusid and (cs.name = 'Active' or cs.name = 'Email Verified')";
+                    "customer_status cs where c.mobile = ? and cs.custatusid=c.custatusid and (cs.name = 'Active' or cs.name = 'Email UnVerified')";
 				cuid = jdbcTemplateObject.queryForObject(get_customer_id, new Object[]{otpRequest.getTarget()}, Integer.TYPE);
                 otp = new String(CustomerRunnerUtil.generateOTP(6));
                 jdbcTemplateObject.update("update customer set data = ? where cuid = ?", new Object[]{otp, cuid});

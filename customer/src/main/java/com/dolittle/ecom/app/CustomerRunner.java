@@ -15,6 +15,7 @@ import com.dolittle.ecom.app.bo.Variables;
 import com.dolittle.ecom.app.security.bo.OTPRequest;
 import com.dolittle.ecom.app.sms.SMSServiceProvider;
 import com.dolittle.ecom.app.util.CustomerRunnerUtil;
+import com.dolittle.ecom.customer.bo.WidgetData;
 import com.dolittle.ecom.customer.bo.general.PaymentOption;
 import com.dolittle.ecom.customer.bo.general.PromoCode;
 import com.dolittle.ecom.customer.bo.general.State;
@@ -450,4 +451,37 @@ public class CustomerRunner implements CommandLineRunner{
 		types.add(selfLink);
 		return types;
 	}
+
+	@GetMapping(value="/application/widgetdata", produces="application/hal+json")
+	public WidgetData getWidgetData() {
+		log.info("Processing request to get widget data ");
+		String fetch_customer_count = "SELECT count(*)  AS count FROM customer where custatusid != 4";
+		String fetch_order_count = "SELECT count(*)  AS count FROM item_order where osid = 2";
+		String fetch_product_count = "SELECT count(*)  AS count FROM item_item where istatusid != 3";
+		String fetch_member_count = "SELECT count(*)  AS count FROM customer_wallet_pack where cuwapasid IN(1,4)";
+
+		int customersCount = 0;
+		int ordersCount = 0;
+		int productsCount = 0;
+		int membersCount = 0;
+		try{
+			customersCount = jdbcTemplate.queryForObject(fetch_customer_count, Integer.TYPE);
+			ordersCount = jdbcTemplate.queryForObject(fetch_order_count, Integer.TYPE);
+			productsCount = jdbcTemplate.queryForObject(fetch_product_count, Integer.TYPE);
+			membersCount = jdbcTemplate.queryForObject(fetch_member_count, Integer.TYPE);
+		}catch(DataAccessException e){
+			log.error("Error while fetching widget data");
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Internal Error while fetching widget data");
+		}
+		
+		WidgetData data = new WidgetData();
+		data.setCustomersCount(customersCount);
+		data.setOrdersCount(ordersCount);
+		data.setMembersCount(membersCount);
+		data.setProductsCount(productsCount);
+
+		Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getWidgetData()).withSelfRel();
+		data.add(selfLink);
+		return data;
+	}	
 }

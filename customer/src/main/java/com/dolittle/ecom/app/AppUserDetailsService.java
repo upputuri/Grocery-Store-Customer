@@ -65,7 +65,7 @@ public class AppUserDetailsService implements UserDetailsService {
         if (userType.equals("C")) {
 
             String get_customer_profile_query = "select c.uid, c.cuid, c.email, c.password, c.fname, c.lname, c.genderid, c.dob, c.mobile, c.alt_email, c.alt_mobile, cs.name as user_status from customer c, "+
-                                        "customer_status cs where (c.mobile = ? or c.email = ?) and cs.custatusid=c.custatusid";
+                                        "customer_status cs where (c.mobile = ? or c.email = ?) and cs.name != 'Deleted' and cs.custatusid=c.custatusid";
             
             try{
                 appUser = jdbcTemplateObject.queryForObject(get_customer_profile_query, new Object[]{username, username}, (rs, rowNum) -> {
