@@ -170,6 +170,7 @@ public class ProductsService{
             "from item_gi igi inner join item_item i on (i.giid=igi.giid) "+
             "inner join inventory_set ins on (i.iid=ins.iid and ins.issid='1' and ins.istid='1') "+
             "inner join inventory_set_variations isv on (isv.isvid=ins.isvid and isv.isvsid='1') "+
+            "inner join checkpoint chk on (ins.chkid = chk.chkid and chk.chksid='1' and chk.coverid = ?) "+
             "left join item_gi_attribute igia on (igi.giid = igia.giid) "+
             "inner join item_attribute ia on (igia.aid=ia.aid and "+attribute_name_filter_sql+") "+
                                                                   "left join item_attribute_group iag on (ia.agid=iag.agid) "+
@@ -186,6 +187,8 @@ public class ProductsService{
                 params.add(keywords);
             }
 
+            params.add(coverId);
+
             if (categoryId.length() > 0) {
                 params.add(categoryId);
             }
@@ -196,7 +199,7 @@ public class ProductsService{
 
             params.add(pageOffset);
             params.add(pageSize);
-
+            // System.out.println(products_page_fetch_sql);
             prods = jdbcTemplateObject.query(
                products_page_fetch_sql, params.toArray(), (rs, rowNumber) -> {
                     Product p = new Product(String.valueOf(rs.getInt("iid")), rs.getString("itemname"), rs.getBigDecimal("price"));
@@ -235,6 +238,9 @@ public class ProductsService{
 
             String fetch_attribute_filters_sql = "select ia.name, GROUP_CONCAT(distinct iav.value SEPARATOR ',') as filter_values "+score_col_sql+
                                                     "from item_gi igi inner join item_item i on (i.giid=igi.giid) "+
+                                                    "inner join inventory_set ins on (i.iid=ins.iid and ins.issid='1' and ins.istid='1') "+
+                                                    "inner join inventory_set_variations isv on (isv.isvid=ins.isvid and isv.isvsid='1') "+
+                                                    "inner join checkpoint chk on (ins.chkid = chk.chkid and chk.chksid='1' and chk.coverid = ?) "+
                                                     "left join item_gi_attribute igia on (igi.giid = igia.giid) "+
                                                     "inner join item_attribute ia on (igia.aid=ia.aid and "+attribute_name_filter_sql+") "+
                                                     "                                                        left join item_attribute_group iag on (ia.agid=iag.agid) "+

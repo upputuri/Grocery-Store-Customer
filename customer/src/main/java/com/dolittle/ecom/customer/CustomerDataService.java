@@ -204,7 +204,7 @@ public class CustomerDataService {
 
         if (profile.getEmail() != null && !profile.getEmail().equals(customer.getEmail()))
         {
-            String check_unique_username_sql = "select count(*) from customer where email=?";
+            String check_unique_username_sql = "select count(*) from customer where email=? and custatusid != (select custatusid from customer_status where name = 'Deleted')";
             int count = jdbcTemplateObject.queryForObject(check_unique_username_sql, new Object[]{profile.getEmail()}, Integer.TYPE);
             if (count > 0) {
                 log.error("Invalid input. An account with the given email already exists.");
@@ -213,19 +213,21 @@ public class CustomerDataService {
         }
         if (profile.getMobile() != null && !profile.getMobile().equals(customer.getMobile()))
         {
-            String check_unique_username_sql = "select count(*) from customer where mobile=?";
+            String check_unique_username_sql = "select count(*) from customer where mobile=? and custatusid != (select custatusid from customer_status where name = 'Deleted')";
             int count = jdbcTemplateObject.queryForObject(check_unique_username_sql, new Object[]{profile.getMobile()}, Integer.TYPE);
             if (count > 0) {
                 log.error("Invalid input. An account with the given mobile# already exists.");
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Mobile No. change not accepted. This mobile no.is registered with another account");
             }
         }
+        
+        int genderId = profile.getGender() != null ? (profile.getGender().equals("male") ? 1 : 2) : null;
         // DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");  
         String strDate = profile.getDob() != null ? profile.getDob() : null;  
         String passwordHash = profile.getPassword() != null ? passwordEncoder.encode(profile.getPassword()) : null;
         try{
-            jdbcTemplateObject.update("update customer set fname=?, lname=?, email=?, alt_email=?, dob=?, mobile=?, alt_mobile=?, password=? where cuid=?", 
-                            profile.getFName(), profile.getLName(), profile.getEmail(), profile.getAltEmail(), strDate, profile.getMobile(), profile.getAltMobile(), passwordHash, customerId);
+            jdbcTemplateObject.update("update customer set fname=?, lname=?, genderid=?, email=?, alt_email=?, dob=?, mobile=?, alt_mobile=?, password=? where cuid=?", 
+                            profile.getFName(), profile.getLName(), genderId, profile.getEmail(), profile.getAltEmail(), strDate, profile.getMobile(), profile.getAltMobile(), passwordHash, customerId);
         }
         catch(DataAccessException e)
         {

@@ -22,7 +22,8 @@ public class StoresService {
     @GetMapping(value= "/stores/covers", produces = "application/hal+json")
 	public CollectionModel<Cover> getCovers()
 	{
-		String fetch_covers_sql = "select coverid, city, shipping_cost, min_order_amount from coverage where coversid=(select coversid from coverage_status where name='Active')";
+		String fetch_covers_sql = "select distinct co.coverid, co.city, co.shipping_cost, co.min_order_amount from checkpoint chk left join coverage co on (chk.coverid = co.coverid) "+
+									"inner join inventory_set invs on (chk.chkid = invs.chkid) where chk.chksid=1 and co.coversid=(select coversid from coverage_status where name='Active')";
 		List<Cover> covers = jdbcTemplateObject.query(fetch_covers_sql, (rs, rowNumber) -> {
 			Cover cover = new Cover();
 			cover.setCoverId(rs.getString("coverid"));
@@ -47,7 +48,8 @@ public class StoresService {
 			state_filter_sql += "and state.stid="+stateId;
 		}
 		String fetch_cities_sql = "select distinct c.city, c.stid, state.state as state, p.pincodes from state, coverage c "+
-								"left join (select ps.name as city, GROUP_CONCAT(psp.pincode SEPARATOR ',') as pincodes from pincode_set_pincode psp, pincode_set ps where ps.pinsid=psp.pinsid group by ps.name) as p on (c.city=p.city) where c.stid=state.stid "+state_filter_sql;
+								"left join (select ps.name as city, GROUP_CONCAT(psp.pincode SEPARATOR ',') as pincodes from pincode_set_pincode psp, pincode_set ps "+
+								"where ps.pinsid=psp.pinsid group by ps.name) as p on (c.city=p.city) where c.coversid=1 and c.stid=state.stid "+state_filter_sql;
 		List<CoverCity> cities = jdbcTemplateObject.query(fetch_cities_sql, (rs, rowNumber) -> {
 			CoverCity city = new CoverCity();
 			city.setName(rs.getString("city"));
