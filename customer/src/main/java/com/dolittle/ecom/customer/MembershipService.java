@@ -258,19 +258,25 @@ public @Data class MembershipService{
                 SimpleJdbcInsert jdbcInsert_transaction = new SimpleJdbcInsert(jdbcTemplateObject)
                                     .usingColumns("cuid", "wapaid", "tid", "start_date", "end_date", "price", "validity", "min_purchase_permonth", "max_purchase_permonth",
                                                     "cuwapasid", "mem_fname", "mem_lname", "mem_fullname", "mem_email", "mem_dob", "mem_gender", "mem_mob", "mem_alt_mob", "mem_pre_addr", "mem_pre_pincode", "mem_photo", "mem_aadhar_fph", "mem_aadhar_bph",
-                                                    "nom_fname", "nom_lname", "nom_fullname", "nom_email", "nom_dob", "nom_gender", "nom_mob", "nom_alt_mob", "nom_photo", "nom_aadhar_fph", "nom_aadhar_bph")
+                                                    "nom_fname", "nom_lname", "nom_fullname", "nom_email", "nom_dob", "nom_gender", "nom_relation", "nom_mob", "nom_alt_mob", "nom_photo", "nom_aadhar_fph", "nom_aadhar_bph")
                                     .withTableName("customer_wallet_pack");
                 Map<String, Object> parameters_insert_transaction = new HashMap<String, Object>(1);
                 parameters_insert_transaction.put("cuid", membershipRequest.getCustomerId());
                 parameters_insert_transaction.put("wapaid", plan.getPlanId());
                 parameters_insert_transaction.put("tid", paymentTransaction.getId());
                 Calendar now = Calendar.getInstance();
-                now.setTimeZone(TimeZone.getTimeZone("GMT+0530"));
-                String startDateStr = now.get(Calendar.YEAR)+"-"+now.get(Calendar.MONTH)+"-"+now.get(Calendar.DAY_OF_MONTH);
-                parameters_insert_transaction.put("start_date", startDateStr);
-                now.add(Calendar.YEAR, plan.getValidityInYears());
-                String endDateStr = now.get(Calendar.YEAR)+"-"+now.get(Calendar.MONTH)+"-"+now.get(Calendar.DAY_OF_MONTH);
-                parameters_insert_transaction.put("end_date", endDateStr);
+                now.set(Calendar.HOUR, 0);
+                now.set(Calendar.MINUTE, 0);
+                now.set(Calendar.SECOND, 0);
+                now.set(Calendar.MILLISECOND, 0);
+                // now.setTimeZone(TimeZone.getTimeZone("GMT+0530"));
+                // String startDateStr = now.get(Calendar.YEAR)+"-"+now.get(Calendar.MONTH)+"-"+now.get(Calendar.DAY_OF_MONTH);
+                parameters_insert_transaction.put("start_date", now);
+                Calendar end_date = Calendar.getInstance();
+                end_date.setTimeInMillis(now.getTimeInMillis());
+                end_date.add(Calendar.YEAR, plan.getValidityInYears());
+                // String endDateStr = now.get(Calendar.YEAR)+"-"+now.get(Calendar.MONTH)+"-"+now.get(Calendar.DAY_OF_MONTH);
+                parameters_insert_transaction.put("end_date", end_date);
                 
                 parameters_insert_transaction.put("price", plan.getPlanPrice());
                 parameters_insert_transaction.put("validity", plan.getValidityInYears());

@@ -18,4 +18,5 @@ public @Data class Nominee extends RepresentationModel<Nominee>{
     private String adhaarBackImg;
     private String photoImg;
     private String relationshipId;
+    private String relationshipName;
 }

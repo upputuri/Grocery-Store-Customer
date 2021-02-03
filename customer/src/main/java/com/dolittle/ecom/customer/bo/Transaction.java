@@ -1,5 +1,6 @@
 package com.dolittle.ecom.customer.bo;
 
+import java.util.Calendar;
 import java.util.Date;
 
 import org.springframework.hateoas.RepresentationModel;
@@ -16,5 +17,5 @@ public @Data class Transaction extends RepresentationModel<Transaction>{
     private String clientResponse;
     private String statusId;
     private String paymentOptionId;
-    private Date ts;
+    private Calendar createdTS;
 }

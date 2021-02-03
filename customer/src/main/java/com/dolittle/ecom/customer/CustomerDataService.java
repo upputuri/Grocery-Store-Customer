@@ -1,6 +1,7 @@
 package com.dolittle.ecom.customer;
 
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -10,10 +11,14 @@ import com.dolittle.ecom.app.util.CustomerRunnerUtil;
 import com.dolittle.ecom.customer.bo.Customer;
 import com.dolittle.ecom.customer.bo.CustomerQuery;
 import com.dolittle.ecom.customer.bo.MPlan;
+import com.dolittle.ecom.customer.bo.Member;
 import com.dolittle.ecom.customer.bo.Membership;
+import com.dolittle.ecom.customer.bo.Nominee;
 import com.dolittle.ecom.customer.bo.ProductReview;
 import com.dolittle.ecom.customer.bo.ShippingAddress;
+import com.dolittle.ecom.customer.bo.Transaction;
 
+import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.EmptyResultDataAccessException;
@@ -204,8 +209,8 @@ public class CustomerDataService {
 
         if (profile.getEmail() != null && !profile.getEmail().equals(customer.getEmail()))
         {
-            String check_unique_username_sql = "select count(*) from customer where email=? and custatusid != (select custatusid from customer_status where name = 'Deleted')";
-            int count = jdbcTemplateObject.queryForObject(check_unique_username_sql, new Object[]{profile.getEmail()}, Integer.TYPE);
+            String check_unique_username_sql = "select count(*) from customer where email=? and cuid != ? and custatusid != (select custatusid from customer_status where name = 'Deleted')";
+            int count = jdbcTemplateObject.queryForObject(check_unique_username_sql, new Object[]{profile.getEmail(), customerId}, Integer.TYPE);
             if (count > 0) {
                 log.error("Invalid input. An account with the given email already exists.");
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Email change not accepted. This email is registered with another account");
@@ -213,20 +218,32 @@ public class CustomerDataService {
         }
         if (profile.getMobile() != null && !profile.getMobile().equals(customer.getMobile()))
         {
-            String check_unique_username_sql = "select count(*) from customer where mobile=? and custatusid != (select custatusid from customer_status where name = 'Deleted')";
-            int count = jdbcTemplateObject.queryForObject(check_unique_username_sql, new Object[]{profile.getMobile()}, Integer.TYPE);
+            String check_unique_username_sql = "select count(*) from customer where mobile=? and cuid != ? and custatusid != (select custatusid from customer_status where name = 'Deleted')";
+            int count = jdbcTemplateObject.queryForObject(check_unique_username_sql, new Object[]{profile.getMobile(), customerId}, Integer.TYPE);
             if (count > 0) {
                 log.error("Invalid input. An account with the given mobile# already exists.");
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Mobile No. change not accepted. This mobile no.is registered with another account");
             }
         }
+        else if (profile.getMobile() == null){
+            log.error("Invalid input. A mobile number is required.");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Mobile number is a required input"); 
+        }
         
-        int genderId = profile.getGender() != null ? (profile.getGender().equals("male") ? 1 : 2) : null;
+        Integer genderId = null;
+        if (profile.getGender() != null){
+            genderId = profile.getGender().equals("male") ? 1 : 2;
+        }
         // DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");  
-        String strDate = profile.getDob() != null ? profile.getDob() : null;  
+        String strDate = profile.getDob() != null ? profile.getDob() : null;
+        if (profile.getPassword() == null || profile.getPassword().length() < 6){
+            log.error("Invalid input. Password must contain atleast 6 characters");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Password must contain atleast 6 characters"); 
+        }  
+
         String passwordHash = profile.getPassword() != null ? passwordEncoder.encode(profile.getPassword()) : null;
         try{
-            jdbcTemplateObject.update("update customer set fname=?, lname=?, genderid=?, email=?, alt_email=?, dob=?, mobile=?, alt_mobile=?, password=? where cuid=?", 
+            jdbcTemplateObject.update("update customer set fname=?, lname=?, genderid=?, email=?, alt_email=?, dob=?, mobile=?, alt_mobile=?, password=? where cuid=? and custatusid != (select custatusid from customer_status where name = 'Deleted')", 
                             profile.getFName(), profile.getLName(), genderId, profile.getEmail(), profile.getAltEmail(), strDate, profile.getMobile(), profile.getAltMobile(), passwordHash, customerId);
         }
         catch(DataAccessException e)
@@ -493,25 +510,86 @@ public class CustomerDataService {
         try{
             log.info("Processing request to get membership for customer Id"+customerId);
             CustomerRunnerUtil.validateAndGetAuthCustomer(auth, customerId.toString());
-            String fetch_membership = "select cwp.cuwapaid, cwp.tid, cwp.start_date, cwp.end_date, cwp.validity, cwp.duration, cwp.min_purchase_permonth, cwp.max_purchase_permonth, wpc.name as category_name, wp.wapaid, wp.name, wp.description, wp.short_desc "+
+            String fetch_membership = "select cwp.cuwapaid, cwp.tid, tr.created_ts, cwp.start_date, cwp.end_date, cwp.validity, cwp.duration, cwp.min_purchase_permonth, cwp.max_purchase_permonth, wpc.name "+
+                                    "as category_name, wp.wapaid, wp.name, wp.renewal_period, wp.renewal_dur, wp.description, wp.short_desc, "+
+                                    "cwp.mem_fname, cwp.mem_lname, cwp.mem_email, cwp.mem_dob, cwp.mem_gender, cwp.mem_mob, cwp.mem_alt_mob, cwp.mem_pre_addr, cwp.mem_pre_pincode, cwp.mem_photo, cwp.mem_aadhar_fph, cwp.mem_aadhar_bph, "+
+                                    "cwp.nom_fname, cwp.nom_lname, cwp.nom_email, cwp.nom_dob, cwp.nom_gender, cwp.nom_mob, cwp.nom_alt_mob, cwp.nom_relation as relation_id, rl.name as relation_name, cwp.nom_photo, cwp.nom_aadhar_fph, cwp.nom_aadhar_bph "+
                                     "from customer_wallet_pack cwp inner join wallet_pack wp on (cwp.wapaid = wp.wapaid and cwp.cuwapasid = 1 and cwp.cuid = ?) "+
-                                    "inner join wallet_pack_category wpc on (wp.wapacatid = wpc.wapacatid) ";
+                                    "inner join wallet_pack_category wpc on (wp.wapacatid = wpc.wapacatid) left join relationship rl on (cwp.nom_relation = rl.relationship_id) "+
+                                    "inner join transaction tr on (cwp.tid = tr.tid)";
 
             Membership membership = jdbcTemplateObject.queryForObject(fetch_membership, new Object[]{customerId}, (rs, rowNum) -> {
                 Membership mship = new Membership();
                 mship.setMembershipId(String.valueOf(rs.getInt("cuwapaid")));
                 mship.setCustomerId(customerId);
+                Calendar start_date = Calendar.getInstance();
+                start_date.setTime(rs.getDate("start_date"));
+                Calendar end_date = Calendar.getInstance();
+                end_date.setTime(rs.getDate("end_date"));
+                mship.setStartDate(start_date);
+                mship.setEndDate(end_date);
+                int renewal_period = rs.getInt("renewal_period");
+                int renewal_duration = rs.getInt("renewal_dur");
+                Calendar renewal_date = Calendar.getInstance();
+                renewal_date.setTimeInMillis(start_date.getTimeInMillis());
+                if (renewal_duration == 1){ //years
+                    renewal_date.add(Calendar.YEAR, renewal_period);
+                }
+                else if (renewal_duration == 2){
+                    renewal_date.add(Calendar.MONTH, renewal_period);
+                }
+                else if (renewal_duration == 3){
+                    renewal_date.add(Calendar.DAY_OF_MONTH, renewal_period);
+                }
+                mship.setRenewalDate(renewal_date);
+                // mship.setRenewalDate(rs.getString("renewal_date"));
                 MPlan plan = new MPlan();
                 plan.setPlanId(String.valueOf(rs.getInt("wapaid")));
                 plan.setPlanName(rs.getString("name"));
                 plan.setCategoryName(rs.getString("category_name"));
-                plan.setValidityInYears(rs.getInt("duration"));
+                plan.setValidityInYears(rs.getInt("validity"));
                 plan.setDescription(rs.getString("description"));
                 plan.setShortDescription(rs.getString("short_desc"));
                 plan.setCategoryId(String.valueOf(rs.getInt("wapaid")));
                 plan.setMaxPurchaseAmount(rs.getBigDecimal("max_purchase_permonth"));
                 plan.setMinPurchaseAmount(rs.getBigDecimal("min_purchase_permonth"));
+                Member member = new Member();
+                member.setFName(rs.getString("mem_fname"));
+                member.setLName(rs.getString("mem_lname"));
+                member.setEmail(rs.getString("mem_email"));
+                member.setDob(rs.getString("mem_dob"));
+                member.setGender(rs.getString("mem_gender"));
+                member.setMobile(rs.getString("mem_mob"));
+                member.setAltMobile(rs.getString("mem_alt_mob"));
+                member.setPresentAddress(rs.getString("mem_pre_addr"));
+                member.setPresentPinCode(rs.getString("mem_pre_pincode"));
+                member.setPhotoImg(rs.getString("mem_photo"));
+                member.setAdhaarFrontImg(rs.getString("mem_aadhar_fph"));
+                member.setAdhaarBackImg(rs.getString("mem_aadhar_bph"));
+                Nominee nominee = new Nominee();
+                nominee.setFName(rs.getString("nom_fname"));
+                nominee.setLName(rs.getString("nom_lname"));
+                nominee.setEmail(rs.getString("nom_email"));
+                nominee.setDob(rs.getString("nom_dob"));
+                nominee.setGender(rs.getString("nom_gender"));
+                nominee.setRelationshipId(rs.getString("relation_id"));
+                nominee.setRelationshipName(rs.getString("relation_name"));
+                nominee.setMobile(rs.getString("nom_mob"));
+                nominee.setAltMobile(rs.getString("nom_alt_mob"));
+                nominee.setPhotoImg(rs.getString("nom_photo"));
+                nominee.setAdhaarFrontImg(rs.getString("nom_aadhar_fph"));
+                nominee.setAdhaarBackImg(rs.getString("nom_aadhar_bph"));
+                
+                Transaction transaction = new Transaction();
+                transaction.setId(rs.getString("tid"));
+                Calendar tran_ts = Calendar.getInstance();
+                tran_ts.setTime(rs.getDate("created_ts"));
+                transaction.setCreatedTS(tran_ts);
+
                 mship.setPlan(plan);
+                mship.setMember(member);
+                mship.setNominee(nominee);
+                mship.setTransaction(transaction);
                 return mship;
             });
 

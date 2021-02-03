@@ -70,8 +70,13 @@ public class CustomerAccountService {
         String get_cart_count_sql = "select count(*) from cart_item where cartid=(select cartid from cart where cuid=?) "+
         "and cartisid=(select cartisid from cart_item_status where name='Active')";
         int cartItemCount = jdbcTemplateObject.queryForObject(get_cart_count_sql, new Object[]{customer.getId()}, Integer.TYPE);
-        Membership membership = customerInfo.getCustomerMembership(customer.getId(), auth);
-        customer.setMembershipId(membership.getMembershipId());
+        try{
+            Membership membership = customerInfo.getCustomerMembership(customer.getId(), auth);
+            customer.setMembershipId(membership.getMembershipId());
+        }catch(Exception e){
+            log.error("Failed to retrieve membership detail during login", e);
+            //Failed to fetch membership details. However, login call should not fail due to this. So, do nothing.
+        }
         // TODO: Implement token/sessionid to avoid sending password each time.  
         // //A customer object is available
         // String update_old_sessions_sql = "update auser_session set ussid=2 where uid=?";
