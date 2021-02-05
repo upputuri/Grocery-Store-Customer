@@ -55,6 +55,37 @@ public class CustomerDataService {
     @Autowired
     JdbcTemplate jdbcTemplateObject;
 
+    @GetMapping(value="/customers/idpool", produces = "application/hal+json")
+    public Customer checkIfUserExists(@RequestParam(value="email", required = false) String email, 
+                                        @RequestParam(value="mobile", required=false) String mobile)
+    {
+        if ((mobile == null || mobile.trim().isEmpty())
+                && (email == null || email.trim().isEmpty())){
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Missing mandatory inputs, pass either mobile or email");
+        }
+        
+        try{
+            String fetch_customer_sql = "select cu.cuid from customer cu where cu.custatusid != (select custatusid from customer_status where name = 'Deleted') and "+
+                                    "((length(cu.mobile) > 0 and cu.mobile=?) or (length(cu.email) > 0 and cu.email=?)) ";
+            jdbcTemplateObject.queryForObject(fetch_customer_sql, new Object[]{mobile, email}, (rs, rowNum) -> {
+                // If control comes here, that means there's a customer record already in db with same email.
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "An account with the email/phone already exists");
+            });
+            log.error("We are not supposed to reach here. Investigate!");
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "An internal error occurred!, pls retry after some time or pls call support");
+        }
+        catch(EmptyResultDataAccessException e)
+        {
+            // This is good. We found not existing user with the given principal. Can use it to register a new user.
+            Customer c = new Customer();
+            c.setEmail(email);
+            c.setMobile(mobile);
+            Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).checkIfUserExists(email, mobile)).withSelfRel();
+            c.add(selfLink);
+            return c;
+        }
+    }
+
     @Transactional
     @PostMapping(value="/customers", produces = "application/hal+json")
     public Customer registerUser(@RequestBody Customer customer)
@@ -261,9 +292,9 @@ public class CustomerDataService {
         CustomerRunnerUtil.validateAndGetAuthCustomer(auth, customerId);
         try{
             List<ShippingAddress> addressList = new ArrayList<ShippingAddress>();
-            String get_customer_addresses = "select sa.said, sa.default_address, sa.first_name, sa.last_name, sa.line1, sa.line2, sa.zip_code, sa.mobile, sa.city, sa.stid, atype.name as label, atype.addtid, state.state "+
-                                            "from customer_shipping_address sa left join address_type atype on (atype.addtid = sa.addtid), state "+
-                                            "where sa.cuid = ? and sa.stid = state.stid and sa.sasid = (select sasid from customer_shipping_address_status where name = 'Active')";
+            String get_customer_addresses = "select sa.said, sa.default_address, sa.first_name, sa.last_name, sa.line1, sa.line2, sa.zip_code, sa.mobile, sa.city, sa.stid, state.ctid, country.name as country_name, atype.name as label, atype.addtid, state.state "+
+                                            "from customer_shipping_address sa left join address_type atype on (atype.addtid = sa.addtid) inner join state on (sa.stid=state.stid) inner join country on (state.ctid=country.ctid) "+
+                                            "where sa.cuid = ? and sa.sasid = (select sasid from customer_shipping_address_status where name = 'Active')";
     
             addressList = jdbcTemplateObject.query(get_customer_addresses, new Object[]{customerId}, (rs, rowNumber) -> {
                 ShippingAddress sa = new ShippingAddress(rs.getString("line1"), rs.getString("city"), rs.getString("zip_code"), rs.getString("mobile"));
@@ -273,6 +304,8 @@ public class CustomerDataService {
                 sa.setLastName(rs.getString("last_name"));
                 sa.setState(rs.getString("state"));
                 sa.setStateId(rs.getInt("stid"));
+                sa.setCountry(rs.getString("country_name"));
+                sa.setCountryId(rs.getInt("ctid"));
                 sa.setDefault(rs.getInt("default_address") == 1);
                 sa.setType(rs.getString("label"));
                 sa.setTypeId(String.valueOf(rs.getInt("addtid")));
@@ -308,7 +341,7 @@ public class CustomerDataService {
             int sasid = jdbcTemplateObject.queryForObject(sql, Integer.TYPE);
 
             SimpleJdbcInsert simpleInsert = new SimpleJdbcInsert(jdbcTemplateObject)
-                                            .usingColumns("cuid","first_name","last_name","line1","line2","city","zip_code","mobile", "stid", "sasid", "default_address")
+                                            .usingColumns("cuid","first_name","last_name","line1","line2","city","zip_code","mobile", "stid", "ctid", "sasid", "default_address")
                                             .withTableName("customer_shipping_address")
                                             .usingGeneratedKeyColumns("said");
             
@@ -320,6 +353,7 @@ public class CustomerDataService {
             parameters.put("line2", address.getLine2());
             parameters.put("city", address.getCity());
             parameters.put("stid", address.getStateId());
+            parameters.put("ctid", address.getCountryId());
             parameters.put("zip_code", address.getZipcode());
             parameters.put("mobile", address.getPhoneNumber());
             parameters.put("sasid", sasid);
@@ -356,11 +390,11 @@ public class CustomerDataService {
                 jdbcTemplateObject.update("update customer_shipping_address set default_address=0 where default_address=1");
             }
 
-            String address_update_sql = "update customer_shipping_address set addtid=?, first_name=?, last_name=?, line1=?, line2=?, city=?, zip_code=?, mobile=?, stid=?, default_address=? "+
+            String address_update_sql = "update customer_shipping_address set addtid=?, first_name=?, last_name=?, line1=?, line2=?, city=?, zip_code=?, mobile=?, stid=?, ctid=?, default_address=? "+
                                         "where said=?";
                             
             int rows = jdbcTemplateObject.update(address_update_sql, address.getTypeId(), address.getFirstName(), address.getLastName(), address.getLine1(), address.getLine2(),
-                                                            address.getCity(), address.getZipcode(), address.getPhoneNumber(), address.getStateId(), address.isDefault()?1:0, addressId);
+                                                            address.getCity(), address.getZipcode(), address.getPhoneNumber(), address.getStateId(), address.getCountryId(), address.isDefault()?1:0, addressId);
 
             if (rows != 1)
             {
@@ -532,16 +566,21 @@ public class CustomerDataService {
                 int renewal_duration = rs.getInt("renewal_dur");
                 Calendar renewal_date = Calendar.getInstance();
                 renewal_date.setTimeInMillis(start_date.getTimeInMillis());
-                if (renewal_duration == 1){ //years
-                    renewal_date.add(Calendar.YEAR, renewal_period);
+                if (renewal_period != 0){
+                    if (renewal_duration == 1){ //years
+                        renewal_date.add(Calendar.YEAR, renewal_period);
+                    }
+                    else if (renewal_duration == 2){
+                        renewal_date.add(Calendar.MONTH, renewal_period);
+                    }
+                    else if (renewal_duration == 3){
+                        renewal_date.add(Calendar.DAY_OF_MONTH, renewal_period);
+                    }
+                    mship.setRenewalDate(renewal_date);
                 }
-                else if (renewal_duration == 2){
-                    renewal_date.add(Calendar.MONTH, renewal_period);
+                else{
+                    mship.setRenewalDate(null);
                 }
-                else if (renewal_duration == 3){
-                    renewal_date.add(Calendar.DAY_OF_MONTH, renewal_period);
-                }
-                mship.setRenewalDate(renewal_date);
                 // mship.setRenewalDate(rs.getString("renewal_date"));
                 MPlan plan = new MPlan();
                 plan.setPlanId(String.valueOf(rs.getInt("wapaid")));

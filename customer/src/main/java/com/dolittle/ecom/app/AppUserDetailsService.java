@@ -82,7 +82,7 @@ public class AppUserDetailsService implements UserDetailsService {
                     c.setId(String.valueOf(rs.getInt("cuid")));
                     c.setFName(rs.getString("fname"));
                     c.setLName(rs.getString("lname"));
-                    c.setGender(rs.getInt("genderid") == 1 ? "male" : "female");
+                    c.setGender(rs.getInt("genderid") == 1 ? "male" : (rs.getInt("genderid") == 2 ? "female" : null));
                     c.setEmail(rs.getString("email"));
                     c.setDob(rs.getString("dob"));
                     c.setAltEmail(rs.getString("alt_email"));

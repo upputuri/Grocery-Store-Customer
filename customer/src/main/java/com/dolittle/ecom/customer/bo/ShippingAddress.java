@@ -17,6 +17,7 @@ public @Data class ShippingAddress extends RepresentationModel<ShippingAddress>{
     private String state;
     private int stateId;
     private String country;
+    private int countryId;
     private final String zipcode;
     private final String phoneNumber;
 

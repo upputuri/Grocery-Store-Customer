@@ -131,9 +131,10 @@ public class OrderService {
     {
         log.info("Processing request to get Order detail for orderId: "+orderId);
         String get_order_sql = "select io.oid, io.cuid, io.said, io.baid, io.shipping_cost, io.tax_percent, io.price, io.discounted_price, ios.name as status, transaction.created_ts, "+
-                                "sa.shipping_first_name, sa.shipping_last_name, sa.shipping_line1, sa.shipping_line2, sa.shipping_city, sa.shipping_zip_code, "+
-                                "sa.shipping_mobile, billing_first_name, billing_last_name, billing_line1, billing_line2, billing_city, billing_zip_code, billing_mobile "+
-                                "from item_order as io, item_order_transaction as iot, transaction, item_order_status as ios, item_order_shipping_address as sa where io.oid=? and sa.oid = io.oid "+
+                                "sa.shipping_first_name, sa.shipping_last_name, sa.shipping_line1, sa.shipping_line2, sa.shipping_city, s1.state as shipping_state, c1.name as shipping_country, sa.shipping_zip_code, "+
+                                "sa.shipping_mobile, billing_first_name, billing_last_name, billing_line1, billing_line2, billing_city, s2.state as billing_state, c2.name as billing_country, billing_zip_code, billing_mobile "+
+                                "from item_order as io, item_order_transaction as iot, transaction, item_order_status as ios, item_order_shipping_address as sa left join state s1 on (sa.shipping_stid = s1.stid) left join state s2 on (sa.billing_stid = s2.stid) "+
+                                "left join country c1 on (s1.ctid=c1.ctid) left join country c2 on (s2.ctid=c2.ctid) where io.oid=? and sa.oid = io.oid "+
                                 "and io.osid = ios.osid and io.oid = iot.oid and iot.tid = transaction.tid";
         Order order = jdbcTemplateObject.queryForObject(get_order_sql, new Object[]{orderId}, (rs, rowNum) -> {
             Order o = new Order();
@@ -164,14 +165,16 @@ public class OrderService {
             sa.setLine2(rs.getString("shipping_line2"));
             sa.setFirstName(rs.getString("shipping_first_name"));
             sa.setLastName(rs.getString("shipping_last_name"));
-            // sa.setState(rs.getString("shipping_state"));
+            sa.setState(rs.getString("shipping_state"));
+            sa.setCountry(rs.getString("shipping_country"));
             o.setShippingAddress(sa);
             ShippingAddress ba = new ShippingAddress(rs.getString("billing_line1"), rs.getString("billing_city"), rs.getString("billing_zip_code"), rs.getString("billing_mobile"));
             ba.setId(String.valueOf(rs.getInt("baid")));
             ba.setLine2(rs.getString("billing_line2"));
             ba.setFirstName(rs.getString("billing_first_name"));
             ba.setLastName(rs.getString("billing_last_name"));
-            // sa.setState(rs.getString("billing_state"));
+            ba.setState(rs.getString("billing_state"));
+            ba.setCountry(rs.getString("billing_country"));
             o.setBillingAddress(ba);
 
             Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).getOrderDetail(orderId, auth)).withSelfRel();
@@ -327,8 +330,8 @@ public class OrderService {
         //                                         "values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         SimpleJdbcInsert jdbcInsert_shipping_address = new SimpleJdbcInsert(jdbcTemplateObject)
                                                         .usingColumns("oid", "shipping_first_name", "shipping_last_name", "shipping_line1", "shipping_line2",
-                                                                    "shipping_city", "shipping_stid", "shipping_zip_code", "shipping_mobile", "billing_first_name", "billing_last_name",
-                                                                    "billing_line1", "billing_line2", "billing_city", "billing_stid", "billing_zip_code", "billing_mobile")
+                                                                    "shipping_city", "shipping_stid", "shipping_ctid", "shipping_zip_code", "shipping_mobile", "billing_first_name", "billing_last_name",
+                                                                    "billing_line1", "billing_line2", "billing_city", "billing_stid", "billing_ctid", "billing_zip_code", "billing_mobile")
                                                         .withTableName("item_order_shipping_address");
 
         Map<String, Object> parameters_insert_shipping_address = new HashMap<String, Object>(1);
@@ -339,6 +342,7 @@ public class OrderService {
         parameters_insert_shipping_address.put("shipping_line2", order.getShippingAddress().getLine2());
         parameters_insert_shipping_address.put("shipping_city", order.getShippingAddress().getCity());
         parameters_insert_shipping_address.put("shipping_stid", order.getShippingAddress().getStateId());
+        parameters_insert_shipping_address.put("shipping_ctid", order.getShippingAddress().getCountryId());
         parameters_insert_shipping_address.put("shipping_zip_code", order.getShippingAddress().getZipcode());
         parameters_insert_shipping_address.put("shipping_mobile", order.getShippingAddress().getPhoneNumber());
         parameters_insert_shipping_address.put("billing_first_name", order.getBillingAddress().getFirstName());
@@ -347,6 +351,7 @@ public class OrderService {
         parameters_insert_shipping_address.put("billing_line2", order.getBillingAddress().getLine2());
         parameters_insert_shipping_address.put("billing_city", order.getBillingAddress().getCity());
         parameters_insert_shipping_address.put("billing_stid", order.getBillingAddress().getStateId());
+        parameters_insert_shipping_address.put("billing_ctid", order.getBillingAddress().getCountryId());
         parameters_insert_shipping_address.put("billing_zip_code", order.getBillingAddress().getZipcode());
         parameters_insert_shipping_address.put("billing_mobile", order.getBillingAddress().getPhoneNumber());
 
@@ -467,8 +472,8 @@ public class OrderService {
         order.addTax(taxDisplayName, taxRate);
         
         //Get delivery address
-        String get_delivery_address_sql = "select sa.said, sa.first_name, sa.last_name, sa.line1, sa.line2, sa.zip_code, sa.mobile, sa.city, sa.stid, state.state "+
-                                            "from customer_shipping_address sa, state where sa.said = ? and sa.stid = state.stid";
+        String get_delivery_address_sql = "select sa.said, sa.first_name, sa.last_name, sa.line1, sa.line2, sa.zip_code, sa.mobile, sa.city, sa.stid, state.state, state.ctid, country.name as country_name "+
+                                            "from customer_shipping_address sa left join state on (sa.stid = state.stid) left join country on (state.ctid = country.ctid) where sa.said = ?";
                                             
         ShippingAddress deliveryAddress = jdbcTemplateObject.queryForObject(get_delivery_address_sql, new Object[]{context.getDeliveryAddressId()}, (rs, rowNum) -> {
             ShippingAddress sa = new ShippingAddress(rs.getString("line1"), rs.getString("city"), rs.getString("zip_code"), rs.getString("mobile"));
@@ -478,6 +483,8 @@ public class OrderService {
             sa.setLastName(rs.getString("last_name"));
             sa.setState(rs.getString("state"));
             sa.setStateId(rs.getInt("stid"));
+            sa.setCountry(rs.getString("country_name"));
+            sa.setCountryId(rs.getInt("ctid"));
             Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).createPreOrder(context, false, coverId, auth)).withSelfRel();
             sa.add(selfLink);
             return sa;
@@ -487,8 +494,8 @@ public class OrderService {
         order.setShippingAddressId(context.getDeliveryAddressId());
 
         //Get billing address
-        String get_billing_address_sql = "select sa.said, sa.first_name, sa.last_name, sa.line1, sa.line2, sa.zip_code, sa.mobile, sa.city, sa.stid, state.state "+
-                                            "from customer_shipping_address sa, state where sa.said = ? and sa.stid = state.stid";
+        String get_billing_address_sql = "select sa.said, sa.first_name, sa.last_name, sa.line1, sa.line2, sa.zip_code, sa.mobile, sa.city, sa.stid, state.state, state.ctid, country.name as country_name "+
+                                            "from customer_shipping_address sa left join state on (sa.stid = state.stid) left join country on (state.ctid = country.ctid) where sa.said = ?";
                                             
         ShippingAddress billingAddress = jdbcTemplateObject.queryForObject(get_billing_address_sql, new Object[]{context.getBillingAddressId()}, (rs, rowNum) -> {
             ShippingAddress sa = new ShippingAddress(rs.getString("line1"), rs.getString("city"), rs.getString("zip_code"), rs.getString("mobile"));
@@ -498,6 +505,8 @@ public class OrderService {
             sa.setLastName(rs.getString("last_name"));
             sa.setState(rs.getString("state"));
             sa.setStateId(rs.getInt("stid"));
+            sa.setCountry(rs.getString("country_name"));
+            sa.setCountryId(rs.getInt("ctid"));
             Link selfLink = WebMvcLinkBuilder.linkTo(WebMvcLinkBuilder.methodOn(this.getClass()).createPreOrder(context, false, coverId, auth)).withSelfRel();
             sa.add(selfLink);
             return sa;
