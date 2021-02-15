@@ -8,6 +8,7 @@ import org.springframework.security.config.annotation.authentication.builders.Au
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
+import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.AuthenticationEntryPoint;
@@ -42,8 +43,9 @@ public class WebSecurityConfig extends WebSecurityConfigurerAdapter {
  
     @Override
     protected void configure(HttpSecurity http) throws Exception {
-        AuthenticationEntryPoint authenticationEntryPoint = new GrocAuthEntryPoint();
+        // AuthenticationEntryPoint authenticationEntryPoint = new GrocAuthEntryPoint();
         http.csrf().disable().cors().and()
+                                .sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS).and()
                                 .authorizeRequests().antMatchers("/me").authenticated()
                                 .antMatchers("/customers/*/cart/items").authenticated()
                                 .antMatchers("/customers/*/cart").authenticated()
